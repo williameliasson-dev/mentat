@@ -11,7 +11,7 @@ Do I wanna setup & mount a SFTP server that i have to connect to via a VPN tunne
 ultimate 100x genius solution? this.
 
 notes, folders, linked pictures? ezy pzy.
-lazily loaded fake file tree in a folder than is synced backed up and have extra features all powered by a dameon.
+lazily loaded fake file tree in a folder than is synced backed up and have extra features all powered by a daemon.
 
 no more simple md notes stuck in a proprietary system where they don't belong.
 I don't want an editor most technically inclined people already do.
@@ -21,8 +21,8 @@ I don't want LLM built in features most technically inclined people already hand
 
 dk yet. lets think.
 
-- Client: not a gui not a tui, a dameon populating and syncing a local dir.
-- Syncing: local dameon syncs to a server that handles the syncing.
+- Client: not a gui not a tui, a daemon populating and syncing a local dir.
+- Syncing: local daemon syncs to a server that handles the syncing.
 - Storage: store files e.g. pics and pdfs in blob and actual text files in GIT. 
 - Additional features?: want a config for data-retention, backups, etc etc? BAM config.md.
 
