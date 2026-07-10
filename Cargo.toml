@@ -1,4 +1,6 @@
 [workspace]
+members = [
+    "sync",
+    "tui",
+]
 resolver = "3"
-members = ["daemon", "sync"]
-

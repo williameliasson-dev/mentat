@@ -28,6 +28,8 @@ dk yet. lets think.
 
 great plan lets build
 
+nvm tui it is lol
+
 
 
 
