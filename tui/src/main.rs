@@ -1,33 +1,41 @@
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::DefaultTerminal;
 
-enum View {
+enum ViewName {
     Home,
     Notes,
 }
 
 struct App {
-    view: View,
+    view: ViewName,
 }
 
 impl App {
     fn run_loop(&self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
-        loop {
-            terminal.draw(|frame| self.render_view(frame, &self.view))?;
-            if crossterm::event::read()?.is_key_press() {
-                break Ok(());
-            }
-        }
+        self.render_view(terminal)
     }
 
-    fn render_view(&self, frame: &mut Frame, view: &View) {
-        match view {
-            View::Home => frame.render_widget("home", frame.area()),
-            View::Notes => frame.render_widget("notes", frame.area()),
+    fn render_view(&self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
+        match self.view {
+            ViewName::Home => loop {
+                terminal.draw(|frame| frame.render_widget("home", frame.area()))?;
+                if crossterm::event::read()?.is_key_press() {
+                    break Ok(());
+                }
+            },
+
+            ViewName::Notes => loop {
+                terminal.draw(|frame| frame.render_widget("notes", frame.area()))?;
+                if crossterm::event::read()?.is_key_press() {
+                    break Ok(());
+                }
+            },
         }
     }
 
     pub fn new() -> Self {
-        App { view: View::Home }
+        App {
+            view: ViewName::Home,
+        }
     }
 
     pub fn run(&self) -> Result<(), std::io::Error> {
