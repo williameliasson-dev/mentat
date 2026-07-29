@@ -1,28 +1,5 @@
-use crossterm::event::Event;
-use ratatui::{DefaultTerminal, Frame};
-
-trait View {
-    fn handle_events(&self, event: Event) -> Action;
-    fn render(&self, frame: &mut Frame);
-}
-
-struct HomeView {}
-
-impl View for HomeView {
-    fn handle_events(&self, event: Event) -> Action {
-        Action::None
-    }
-
-    fn render(&self, frame: &mut Frame) {
-        frame.render_widget("aaa", frame.area());
-    }
-}
-
-enum Action {
-    None,
-    Exit,
-    SwitchTo(Box<dyn View>),
-}
+use ratatui::DefaultTerminal;
+use tui::{Action, View, views::HomeView};
 
 struct App {
     view: Box<dyn View>,
