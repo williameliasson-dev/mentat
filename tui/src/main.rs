@@ -33,6 +33,7 @@ impl App {
     pub fn run(&mut self) -> Result<(), std::io::Error> {
         ratatui::run(|terminal| self.run_loop(terminal))
     }
+
     fn handle_global(&self, event: Event) -> Option<Action> {
         if let Event::Key(key) = event {
             match key.code {
