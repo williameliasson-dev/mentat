@@ -1,3 +1,4 @@
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::DefaultTerminal;
 use tui::{Action, View, views::HomeView};
 
@@ -10,11 +11,16 @@ impl App {
         loop {
             terminal.draw(|frame| self.view.render(frame))?;
             let event = crossterm::event::read()?;
-            match self.view.handle_events(event) {
-                Action::None => (),
-                Action::SwitchTo(view) => self.view = view,
-                Action::Exit => (),
+
+            if let Some(action) = self.handle_global(event.clone()) {
+                match action {
+                    Action::Exit => break Ok(()),
+                    Action::SwitchTo(view) => self.view = view,
+                    _ => {}
+                }
             }
+
+            self.view.handle_events(event);
         }
     }
 
@@ -26,6 +32,18 @@ impl App {
 
     pub fn run(&mut self) -> Result<(), std::io::Error> {
         ratatui::run(|terminal| self.run_loop(terminal))
+    }
+    fn handle_global(&self, event: Event) -> Option<Action> {
+        if let Event::Key(key) = event {
+            match key.code {
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    Some(Action::Exit)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }
 

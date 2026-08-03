@@ -4,7 +4,7 @@ use ratatui::Frame;
 pub mod views;
 
 pub trait View {
-    fn handle_events(&self, event: Event) -> Action;
+    fn handle_events(&self, event: Event);
     fn render(&self, frame: &mut Frame);
 }
 
