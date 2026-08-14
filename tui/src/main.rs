@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::DefaultTerminal;
-use tui::{Action, View, views::NotesView};
+use tui::{
+    Action, View,
+    views::{HomeView, NotesView},
+};
 
 mod editor;
 
@@ -14,9 +17,7 @@ struct App {
 impl App {
     pub fn new() -> Self {
         let db_path = db_path();
-        let view = NotesView::open(&db_path)
-            .map(|v| Box::new(v) as Box<dyn View>)
-            .expect("failed to open notes database");
+        let view = Box::new(HomeView::new());
         App { view, db_path }
     }
 
