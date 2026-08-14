@@ -2,6 +2,7 @@ use crossterm::event::Event;
 use ratatui::Frame;
 use ratatui::layout::Position;
 
+pub mod consts;
 pub mod views;
 
 pub trait View {
