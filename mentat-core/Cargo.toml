@@ -1,5 +1,5 @@
 [package]
-name = "sync"
+name = "mentat-core"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,5 +8,5 @@ rusqlite = "0.40.1"
 thiserror = "2.0.19"
 
 [lib]
-name ="core"
+name = "mentat_core"
 path ="src/lib.rs"
