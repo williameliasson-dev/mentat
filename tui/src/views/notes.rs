@@ -118,7 +118,7 @@ impl NotesView {
     fn handle_navigate(&mut self, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Char('q') => Some(Action::Exit),
-            KeyCode::Char('h') => Some(Action::SwitchTo(Box::new(crate::views::HomeView {}))),
+            KeyCode::Char('h') => Some(Action::SwitchTo(Box::new(crate::views::HomeView::new()))),
             KeyCode::Char('j') | KeyCode::Down => {
                 self.select_next();
                 None

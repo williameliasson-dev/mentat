@@ -1,65 +1,129 @@
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
-    style::{Style, Stylize},
-    symbols::border,
-    text::Line,
-    widgets::{Block, Borders, Paragraph},
+    layout::{Alignment, Constraint, Flex, Layout},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
 };
 
 use crate::{Action, View};
 
-pub struct HomeView {}
+const BANNER: &[&str] = &[
+    r"███╗   ███╗███████╗███╗   ██╗████████╗ █████╗ ████████╗",
+    r"████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚══██╔══╝",
+    r"██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ███████║   ██║   ",
+    r"██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ",
+    r"██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ",
+    r"╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ",
+];
+
+/// The maw of Shai-Hulud.
+const SIGNET: &[&str] = &[
+    r"_.--~~~~--._",
+    r".-~            ~-.",
+    r"/   .-~~~~~~~~-.   \",
+    r"|   /   .-~~~~-.  \   |",
+    r"|  |   /  .--.  \  |  |",
+    r" \  \ |  (    ) | /  /",
+    r"  \  \ \  '--' / /  /",
+    r"   \  \ '~~~~'  /  /",
+    r"    \  '.____.'  /",
+    r"     '-........-'",
+];
+
+const QUOTE: &str = "\"It is by will alone I set my mind in motion.\"";
+
+const MENU: &[(&str, &str)] = &[("n", "Notes"), ("q", "Quit")];
+
+/// Arrakis sand.
+const SAND: Color = Color::Rgb(194, 154, 91);
+/// Deep desert shadow.
+const DIM: Color = Color::Rgb(120, 100, 70);
+
+#[derive(Default)]
+pub struct HomeView {
+    selected: usize,
+}
+
+impl HomeView {
+    pub fn new() -> Self {
+        Self { selected: 0 }
+    }
+}
 
 impl View for HomeView {
     fn handle_events(&mut self, event: Event) -> Option<Action> {
-        if let Event::Key(key) = event {
-            match key.code {
-                KeyCode::Char('q') => return Some(Action::Exit),
-                KeyCode::Char('n') => return Some(Action::ShowNotes),
-                _ => {}
+        let Event::Key(key) = event else { return None };
+        match key.code {
+            KeyCode::Char('q') => Some(Action::Exit),
+            KeyCode::Char('n') => Some(Action::ShowNotes),
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.selected = (self.selected + 1).min(MENU.len() - 1);
+                None
             }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.selected = self.selected.saturating_sub(1);
+                None
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => match MENU[self.selected].0 {
+                "n" => Some(Action::ShowNotes),
+                _ => Some(Action::Exit),
+            },
+            _ => None,
         }
-        None
     }
 
     fn render(&self, frame: &mut Frame) {
-        let text = vec![
-            "".into(),
-            "Daily Note".into(),
-            "tutorial-swag.md".into(),
-            "Third line".into(),
-        ];
+        let mut lines: Vec<Line> = Vec::new();
 
-        let instructions = Line::from(vec![
-            " Notes ".into(),
-            "<n>".blue().bold(),
-            " Quit ".into(),
-            "<q> ".blue().bold(),
-        ]);
+        for l in BANNER {
+            lines.push(Line::from(Span::styled(*l, Style::new().fg(SAND))));
+        }
+        lines.push(Line::from(""));
 
-        let block = Block::bordered().border_set(border::THICK);
+        for l in SIGNET {
+            lines.push(Line::from(Span::styled(*l, Style::new().fg(DIM))));
+        }
+        lines.push(Line::from(""));
 
-        let paragraph = Paragraph::new(text)
-            .block(block)
-            .style(Style::new().white().on_black());
+        for (i, (_key, label)) in MENU.iter().enumerate() {
+            let style = if i == self.selected {
+                Style::new()
+                    .fg(Color::Black)
+                    .bg(SAND)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::new().fg(SAND)
+            };
+            lines.push(Line::from(Span::styled(format!("  {label:<12}"), style)));
+        }
 
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(vec![
-                Constraint::Percentage(4),
-                Constraint::Percentage(95),
-                Constraint::Percentage(1),
-            ])
-            .split(frame.area());
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            QUOTE,
+            Style::new().fg(DIM).add_modifier(Modifier::ITALIC),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(" select ", Style::new().fg(DIM)),
+            Span::styled("<j/k>", Style::new().fg(SAND).bold()),
+            Span::styled("  open ", Style::new().fg(DIM)),
+            Span::styled("<enter>", Style::new().fg(SAND).bold()),
+        ]));
 
-        frame.render_widget(
-            Paragraph::new("Tabs").block(Block::new().borders(Borders::ALL)),
-            layout[0],
-        );
+        let height = lines.len() as u16;
+        let width = lines.iter().map(|l| l.width()).max().unwrap_or(0) as u16;
 
-        frame.render_widget(paragraph, layout[1]);
-        frame.render_widget(instructions, layout[2]);
+        let paragraph = Paragraph::new(lines).alignment(Alignment::Center);
+
+        let [area] = Layout::vertical([Constraint::Length(height)])
+            .flex(Flex::Center)
+            .areas(frame.area());
+        let [area] = Layout::horizontal([Constraint::Length(width)])
+            .flex(Flex::Center)
+            .areas(area);
+
+        frame.render_widget(paragraph, area);
     }
 }
