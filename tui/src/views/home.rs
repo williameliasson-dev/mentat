@@ -1,4 +1,4 @@
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
@@ -8,12 +8,21 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::View;
+use crate::{Action, View};
 
 pub struct HomeView {}
 
 impl View for HomeView {
-    fn handle_events(&self, event: Event) {}
+    fn handle_events(&mut self, event: Event) -> Option<Action> {
+        if let Event::Key(key) = event {
+            match key.code {
+                KeyCode::Char('q') => return Some(Action::Exit),
+                KeyCode::Char('n') => return Some(Action::ShowNotes),
+                _ => {}
+            }
+        }
+        None
+    }
 
     fn render(&self, frame: &mut Frame) {
         let text = vec![
@@ -24,10 +33,10 @@ impl View for HomeView {
         ];
 
         let instructions = Line::from(vec![
-            " Binds ".into(),
-            "<?>".blue().bold(),
+            " Notes ".into(),
+            "<n>".blue().bold(),
             " Quit ".into(),
-            "<Ctrl-C> ".blue().bold(),
+            "<q> ".blue().bold(),
         ]);
 
         let block = Block::bordered().border_set(border::THICK);
