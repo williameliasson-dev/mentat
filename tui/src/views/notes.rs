@@ -2,12 +2,12 @@ use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position},
-    style::{Modifier, Style, Stylize},
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::{Action, View};
+use crate::{Action, View, consts::colors};
 use mentat_core::{Note, NoteRepository, NoteService, Result as CoreResult};
 
 const TITLE_MAX: usize = 60;
@@ -87,30 +87,32 @@ impl NotesView {
     }
 
     fn instructions(&self) -> Line<'static> {
+        let key = |s: &'static str| Span::styled(s, Style::new().fg(colors::SAND).bold());
+        let text = |s: &'static str| Span::styled(s, Style::new().fg(colors::DIM));
         match self.mode {
             Mode::Navigate => Line::from(vec![
-                " New ".into(),
-                "<n>".blue().bold(),
-                " Edit ".into(),
-                "<e>".blue().bold(),
-                " Delete ".into(),
-                "<d>".blue().bold(),
-                " Home ".into(),
-                "<h>".blue().bold(),
-                " Quit ".into(),
-                "<q>".blue().bold(),
+                text(" New "),
+                key("<n>"),
+                text(" Edit "),
+                key("<e>"),
+                text(" Delete "),
+                key("<d>"),
+                text(" Home "),
+                key("<h>"),
+                text(" Quit "),
+                key("<q>"),
             ]),
             Mode::NewTitle => Line::from(vec![
-                " Create ".into(),
-                "<Enter>".blue().bold(),
-                " Cancel ".into(),
-                "<Esc>".blue().bold(),
+                text(" Create "),
+                key("<Enter>"),
+                text(" Cancel "),
+                key("<Esc>"),
             ]),
             Mode::ConfirmDelete => Line::from(vec![
-                " Delete note? ".into(),
-                "<y>".red().bold(),
-                " / ".into(),
-                "<n>".blue().bold(),
+                text(" Delete note? "),
+                Span::styled("<y>", Style::new().fg(colors::DANGER).bold()),
+                text(" / "),
+                key("<n>"),
             ]),
         }
     }
@@ -234,20 +236,33 @@ impl View for NotesView {
         ])
         .split(frame.area());
 
-        frame.render_widget(Paragraph::new(" mentat").bold(), layout[0]);
+        frame.render_widget(
+            Paragraph::new(" mentat").style(Style::new().fg(colors::SAND).bold()),
+            layout[0],
+        );
 
         let panes = Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(65)])
             .split(layout[1]);
+
+        let pane_block = |title: &str| {
+            Block::new()
+                .title(Span::styled(
+                    title.to_string(),
+                    Style::new().fg(colors::SAND),
+                ))
+                .borders(Borders::ALL)
+                .border_style(Style::new().fg(colors::DIM))
+        };
 
         // Note list
         let items: Vec<ListItem> = self
             .notes
             .iter()
-            .map(|n| ListItem::new(n.title.as_str()))
+            .map(|n| ListItem::new(n.title.as_str()).style(Style::new().fg(colors::TEXT)))
             .collect();
         let list = List::new(items)
-            .block(Block::new().title(" Notes ").borders(Borders::ALL))
-            .highlight_style(Style::new().reversed())
+            .block(pane_block(" Notes "))
+            .highlight_style(Style::new().fg(Color::Black).bg(colors::SAND).bold())
             .highlight_symbol("> ");
         let mut state = self.list_state;
         frame.render_stateful_widget(list, panes[0], &mut state);
@@ -256,7 +271,8 @@ impl View for NotesView {
         match self.mode {
             Mode::NewTitle => {
                 let p = Paragraph::new(self.title_input.as_str())
-                    .block(Block::new().title(" New note title ").borders(Borders::ALL));
+                    .style(Style::new().fg(colors::TEXT))
+                    .block(pane_block(" New note title "));
                 frame.render_widget(p, panes[1]);
             }
             Mode::ConfirmDelete => {
@@ -265,11 +281,11 @@ impl View for NotesView {
                     .map(|n| n.title.as_str())
                     .unwrap_or("");
                 let p = Paragraph::new(Line::from(vec![
-                    Span::raw(" Delete "),
-                    Span::styled(title, Style::new().add_modifier(Modifier::BOLD)),
-                    Span::raw("? <y/n>"),
+                    Span::styled(" Delete ", Style::new().fg(colors::DANGER)),
+                    Span::styled(title, Style::new().fg(colors::TEXT).bold()),
+                    Span::styled("? <y/n>", Style::new().fg(colors::DANGER)),
                 ]))
-                .block(Block::new().borders(Borders::ALL));
+                .block(pane_block(" Confirm "));
                 frame.render_widget(p, panes[1]);
             }
             Mode::Navigate => {
@@ -283,7 +299,8 @@ impl View for NotesView {
                     .map(|n| format!(" {} ", n.title))
                     .unwrap_or_else(|| " Preview ".into());
                 let p = Paragraph::new(body)
-                    .block(Block::new().title(title).borders(Borders::ALL))
+                    .style(Style::new().fg(colors::TEXT))
+                    .block(pane_block(&title))
                     .wrap(Wrap { trim: false });
                 frame.render_widget(p, panes[1]);
             }
