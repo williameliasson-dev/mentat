@@ -13,7 +13,7 @@ struct App {
 
 impl App {
     pub fn new() -> Self {
-        let db_path = PathBuf::from("mentat.db");
+        let db_path = db_path();
         let view = NotesView::open(&db_path)
             .map(|v| Box::new(v) as Box<dyn View>)
             .expect("failed to open notes database");
@@ -81,6 +81,17 @@ impl App {
         }
         None
     }
+}
+
+/// Platform-idiomatic database location:
+/// Linux: `~/.local/share/mentat/mentat.db`
+/// macOS: `~/Library/Application Support/dev.mentat/mentat.db`
+fn db_path() -> PathBuf {
+    let dirs = directories::ProjectDirs::from("dev", "", "mentat")
+        .expect("could not determine data directory");
+    let dir = dirs.data_dir();
+    std::fs::create_dir_all(dir).expect("failed to create data directory");
+    dir.join("mentat.db")
 }
 
 fn main() -> color_eyre::Result<()> {

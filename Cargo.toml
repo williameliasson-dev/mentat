@@ -4,3 +4,10 @@ members = [
     "tui",
 ]
 resolver = "3"
+
+# Release optimizations, see: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
