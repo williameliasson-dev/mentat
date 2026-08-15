@@ -3,6 +3,7 @@ use ratatui::Frame;
 use ratatui::layout::Position;
 
 pub mod consts;
+pub mod markdown;
 pub mod views;
 
 pub trait View {

@@ -67,7 +67,8 @@ impl NotesView {
             return;
         }
         let i = self.list_state.selected().unwrap_or(0);
-        self.list_state.select(Some((i + 1).min(self.notes.len() - 1)));
+        self.list_state
+            .select(Some((i + 1).min(self.notes.len() - 1)));
     }
 
     fn select_previous(&mut self) {
@@ -94,7 +95,7 @@ impl NotesView {
                 text(" New "),
                 key("<n>"),
                 text(" Edit "),
-                key("<e>"),
+                key("<enter>"),
                 text(" Delete "),
                 key("<d>"),
                 text(" Home "),
@@ -135,7 +136,7 @@ impl NotesView {
                 self.input_cursor = 0;
                 None
             }
-            KeyCode::Char('e') => self.selected_id().map(Action::EditNote),
+            KeyCode::Enter => self.selected_id().map(Action::EditNote),
             KeyCode::Char('d') => {
                 if self.selected_note().is_some() {
                     self.mode = Mode::ConfirmDelete;
@@ -201,8 +202,7 @@ impl NotesView {
             KeyCode::Delete => {
                 if self.input_cursor < self.title_input.len() {
                     let next = next_char_boundary(&self.title_input, self.input_cursor);
-                    self.title_input
-                        .replace_range(self.input_cursor..next, "");
+                    self.title_input.replace_range(self.input_cursor..next, "");
                 }
             }
             KeyCode::Left => {
@@ -276,10 +276,7 @@ impl View for NotesView {
                 frame.render_widget(p, panes[1]);
             }
             Mode::ConfirmDelete => {
-                let title = self
-                    .selected_note()
-                    .map(|n| n.title.as_str())
-                    .unwrap_or("");
+                let title = self.selected_note().map(|n| n.title.as_str()).unwrap_or("");
                 let p = Paragraph::new(Line::from(vec![
                     Span::styled(" Delete ", Style::new().fg(colors::DANGER)),
                     Span::styled(title, Style::new().fg(colors::TEXT).bold()),
@@ -289,20 +286,22 @@ impl View for NotesView {
                 frame.render_widget(p, panes[1]);
             }
             Mode::Navigate => {
-                let body = match self.selected_note() {
-                    Some(n) => n.body.as_str(),
-                    None if self.notes.is_empty() => "No notes yet. Press <n> to create one.",
-                    None => "",
-                };
                 let title = self
                     .selected_note()
                     .map(|n| format!(" {} ", n.title))
                     .unwrap_or_else(|| " Preview ".into());
-                let p = Paragraph::new(body)
-                    .style(Style::new().fg(colors::TEXT))
-                    .block(pane_block(&title))
-                    .wrap(Wrap { trim: false });
-                frame.render_widget(p, panes[1]);
+                let p = match self.selected_note() {
+                    Some(n) => Paragraph::new(crate::markdown::render(&n.body)),
+                    None if self.notes.is_empty() => {
+                        Paragraph::new("No notes yet. Press <n> to create one.")
+                            .style(Style::new().fg(colors::TEXT))
+                    }
+                    None => Paragraph::new(""),
+                };
+                frame.render_widget(
+                    p.block(pane_block(&title)).wrap(Wrap { trim: false }),
+                    panes[1],
+                );
             }
         }
 
@@ -331,7 +330,10 @@ impl View for NotesView {
     }
 
     fn note_body(&self, id: i64) -> Option<String> {
-        self.notes.iter().find(|n| n.id == id).map(|n| n.body.clone())
+        self.notes
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| n.body.clone())
     }
 
     fn set_note_body(&mut self, id: i64, body: &str) {

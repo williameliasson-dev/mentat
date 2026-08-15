@@ -12,6 +12,7 @@ color-eyre = "0.6.5"
 crossterm = "0.29.0"
 ratatui = "0.30.2"
 directories = "6.0.0"
+minimad = "0.16.0"
 
 [lib]
 name ="tui"

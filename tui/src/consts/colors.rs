@@ -15,3 +15,6 @@ pub const TEXT: Color = Color::Rgb(210, 200, 185);
 
 /// Danger: destructive confirmations (delete prompts).
 pub const DANGER: Color = Color::Rgb(200, 90, 70);
+
+/// Dark: foreground for text sitting on a SAND background (code chips).
+pub const DARK: Color = Color::Rgb(30, 25, 20);
