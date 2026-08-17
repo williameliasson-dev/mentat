@@ -1,7 +1,5 @@
-use std::path::PathBuf;
-
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use mentat_core::{NoteRepository, NoteService};
+use mentat_core::Database;
 use ratatui::DefaultTerminal;
 use tui::{Action, Services, View, views::HomeView};
 
@@ -13,11 +11,12 @@ struct App {
 }
 
 impl App {
+    /// Opens the database and builds the initial view. Runs before the TUI is
+    /// initialised, so a failure reports to a normal terminal.
     pub fn new() -> color_eyre::Result<Self> {
+        let database = Database::new()?;
         Ok(App {
-            services: Services {
-                notes: NoteService::new(NoteRepository::open(db_path())?),
-            },
+            services: Services::new(database.repositories()),
             view: Box::new(HomeView::new()),
         })
     }
@@ -80,17 +79,6 @@ impl App {
         }
         None
     }
-}
-
-/// Platform-idiomatic database location:
-/// Linux: `~/.local/share/mentat/mentat.db`
-/// macOS: `~/Library/Application Support/dev.mentat/mentat.db`
-fn db_path() -> PathBuf {
-    let dirs = directories::ProjectDirs::from("dev", "", "mentat")
-        .expect("could not determine data directory");
-    let dir = dirs.data_dir();
-    std::fs::create_dir_all(dir).expect("failed to create data directory");
-    dir.join("mentat.db")
 }
 
 fn main() -> color_eyre::Result<()> {

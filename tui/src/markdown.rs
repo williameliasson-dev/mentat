@@ -17,21 +17,24 @@ fn render_line(md: MdLine) -> Line<'static> {
     match md {
         MdLine::Normal(c) => composite_line(&c),
         MdLine::CodeFence(_) => Line::from(Span::styled("```", code_style())),
-        MdLine::HorizontalRule => Line::from(Span::styled(
-            "─".repeat(40),
-            Style::new().fg(colors::DIM),
-        )),
+        MdLine::HorizontalRule => {
+            Line::from(Span::styled("─".repeat(40), Style::new().fg(colors::DIM)))
+        }
         // Tables render as raw rows for now.
         MdLine::TableRow(row) => Line::from(
             row.cells
                 .iter()
-                .flat_map(|c| c.compounds.iter().map(compound_span).chain([Span::raw(" │ ")]))
+                .flat_map(|c| {
+                    c.compounds
+                        .iter()
+                        .map(compound_span)
+                        .chain([Span::raw(" │ ")])
+                })
                 .collect::<Vec<_>>(),
         ),
-        MdLine::TableRule(_) => Line::from(Span::styled(
-            "─".repeat(20),
-            Style::new().fg(colors::DIM),
-        )),
+        MdLine::TableRule(_) => {
+            Line::from(Span::styled("─".repeat(20), Style::new().fg(colors::DIM)))
+        }
     }
 }
 
@@ -51,7 +54,11 @@ fn composite_line(c: &Composite) -> Line<'static> {
         }
         CompositeStyle::OrderedListItem { level, index } => {
             spans.push(Span::styled(
-                format!("{}{}. ", "  ".repeat(level.saturating_sub(1) as usize), index),
+                format!(
+                    "{}{}. ",
+                    "  ".repeat(level.saturating_sub(1) as usize),
+                    index
+                ),
                 Style::new().fg(colors::SAND),
             ));
             Style::new().fg(colors::TEXT)
@@ -67,12 +74,13 @@ fn composite_line(c: &Composite) -> Line<'static> {
         CompositeStyle::Paragraph => Style::new().fg(colors::TEXT),
     };
 
-    spans.extend(
-        c.compounds
-            .iter()
-            .enumerate()
-            .map(|(i, cp)| compound_span_base(cp, base, matches!(c.style, CompositeStyle::Header(_)) && i == 0)),
-    );
+    spans.extend(c.compounds.iter().enumerate().map(|(i, cp)| {
+        compound_span_base(
+            cp,
+            base,
+            matches!(c.style, CompositeStyle::Header(_)) && i == 0,
+        )
+    }));
     Line::from(spans)
 }
 

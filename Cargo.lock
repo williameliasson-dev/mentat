@@ -809,6 +809,7 @@ dependencies = [
 name = "mentat-core"
 version = "0.1.0"
 dependencies = [
+ "directories",
  "rusqlite",
  "thiserror 2.0.19",
 ]
@@ -1756,7 +1757,6 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "crossterm",
- "directories",
  "mentat-core",
  "minimad",
  "ratatui",

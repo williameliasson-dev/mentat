@@ -1,7 +1,7 @@
-use mentat_core::{NoteRepository, NoteService};
+use mentat_core::{Database, NoteService};
 
 fn service() -> NoteService {
-    NoteService::new(NoteRepository::in_memory().unwrap())
+    NoteService::new(Database::in_memory().unwrap().repositories().notes)
 }
 
 #[test]

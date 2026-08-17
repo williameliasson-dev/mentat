@@ -1,35 +1,26 @@
+use std::rc::Rc;
+
 use rusqlite::{Connection, params};
 
 use crate::{CoreError, Note, Result};
 
 pub struct NoteRepository {
-    conn: Connection,
+    connection: Rc<Connection>,
 }
 
 impl NoteRepository {
-    /// Opens (or creates) a database at the given path and runs migrations.
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        Self::new(Connection::open(path)?)
-    }
-
-    /// Creates an in-memory repository. Useful for tests.
-    pub fn in_memory() -> Result<Self> {
-        Self::new(Connection::open_in_memory()?)
-    }
-
-    fn new(conn: Connection) -> Result<Self> {
-        conn.execute_batch(include_str!("seed.sql"))?;
-        Ok(Self { conn })
+    pub(crate) fn new(connection: Rc<Connection>) -> Self {
+        Self { connection }
     }
 
     pub fn create(&self, title: &str, body: &str) -> Result<Note> {
         let now = now_unix();
-        self.conn.execute(
+        self.connection.execute(
             "INSERT INTO notes (title, body, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
             params![title, body, now],
         )?;
         Ok(Note {
-            id: self.conn.last_insert_rowid(),
+            id: self.connection.last_insert_rowid(),
             title: title.to_string(),
             body: body.to_string(),
             created_at: now,
@@ -38,7 +29,7 @@ impl NoteRepository {
     }
 
     pub fn get(&self, id: i64) -> Result<Note> {
-        self.conn
+        self.connection
             .query_row(
                 "SELECT id, title, body, created_at, updated_at FROM notes WHERE id = ?1",
                 params![id],
@@ -51,7 +42,7 @@ impl NoteRepository {
     }
 
     pub fn list(&self) -> Result<Vec<Note>> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.connection.prepare(
             "SELECT id, title, body, created_at, updated_at FROM notes ORDER BY updated_at DESC",
         )?;
         let notes = stmt
@@ -61,7 +52,7 @@ impl NoteRepository {
     }
 
     pub fn update(&self, id: i64, title: &str, body: &str) -> Result<Note> {
-        let changed = self.conn.execute(
+        let changed = self.connection.execute(
             "UPDATE notes SET title = ?1, body = ?2, updated_at = ?3 WHERE id = ?4",
             params![title, body, now_unix(), id],
         )?;
@@ -73,7 +64,7 @@ impl NoteRepository {
 
     pub fn delete(&self, id: i64) -> Result<()> {
         let changed = self
-            .conn
+            .connection
             .execute("DELETE FROM notes WHERE id = ?1", params![id])?;
         if changed == 0 {
             return Err(CoreError::NotFound(id));

@@ -2,20 +2,28 @@ use crossterm::event::Event;
 use ratatui::Frame;
 use ratatui::layout::Position;
 
-use mentat_core::NoteService;
+use mentat_core::{NoteService, Repositories};
 
 pub mod consts;
 pub mod markdown;
 pub mod views;
 
-/// Every long-lived service, opened once at startup and owned by `App`.
+/// Every long-lived service, built once at startup and owned by `App`.
 ///
 /// Views are lent this per call rather than holding it, so no view keeps a
 /// service it doesn't use and none can hold a stale handle. Adding a service
-/// means adding a field here and constructing it in `main` — no view
-/// signatures or `Action` variants change.
+/// means adding a field here and a line in `new` — no view signatures or
+/// `Action` variants change.
 pub struct Services {
     pub notes: NoteService,
+}
+
+impl Services {
+    pub fn new(repositories: Repositories) -> Self {
+        Self {
+            notes: NoteService::new(repositories.notes),
+        }
+    }
 }
 
 pub trait View {

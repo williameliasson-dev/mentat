@@ -1,7 +1,7 @@
-use mentat_core::{CoreError, NoteRepository};
+use mentat_core::{CoreError, Database, NoteRepository};
 
 fn repo() -> NoteRepository {
-    NoteRepository::in_memory().unwrap()
+    Database::in_memory().unwrap().repositories().notes
 }
 
 #[test]
