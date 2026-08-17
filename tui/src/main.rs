@@ -1,6 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use mentat_core::Database;
 use ratatui::DefaultTerminal;
+use tui::Database;
 use tui::{Action, Services, View, views::HomeView};
 
 mod editor;

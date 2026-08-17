@@ -1,4 +1,4 @@
-use mentat_core::{CoreError, Database, NoteRepository};
+use tui::{CoreError, Database, NoteRepository};
 
 fn repo() -> NoteRepository {
     Database::in_memory().unwrap().repositories().notes

@@ -1,4 +1,4 @@
-use mentat_core::{Database, NoteService};
+use tui::{Database, NoteService};
 
 fn service() -> NoteService {
     NoteService::new(Database::in_memory().unwrap().repositories().notes)

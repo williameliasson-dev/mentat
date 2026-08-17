@@ -7,8 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::{Action, Services, View, consts::colors};
-use mentat_core::Note;
+use crate::{Action, Note, Services, View, consts::colors};
 
 const TITLE_MAX: usize = 60;
 

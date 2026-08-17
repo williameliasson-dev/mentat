@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "mentat-core",
     "tui",
 ]
 resolver = "3"
