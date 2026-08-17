@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::{
-    Action, View,
+    Action, Services, View,
     consts::colors::{DIM, SAND},
 };
 
@@ -132,11 +132,13 @@ impl HomeView {
 }
 
 impl View for HomeView {
-    fn handle_events(&mut self, event: Event) -> Option<Action> {
+    fn handle_events(&mut self, services: &Services, event: Event) -> Option<Action> {
         let Event::Key(key) = event else { return None };
         match key.code {
             KeyCode::Char('q') => Some(Action::Exit),
-            KeyCode::Char('n') => Some(Action::ShowNotes),
+            KeyCode::Char('n') => Some(Action::SwitchTo(Box::new(crate::views::NotesView::new(
+                services,
+            )))),
             KeyCode::Char('j') | KeyCode::Down => {
                 self.selected = (self.selected + 1).min(MENU.len() - 1);
                 None
@@ -146,7 +148,9 @@ impl View for HomeView {
                 None
             }
             KeyCode::Enter | KeyCode::Char(' ') => match MENU[self.selected].0 {
-                "n" => Some(Action::ShowNotes),
+                "n" => Some(Action::SwitchTo(Box::new(crate::views::NotesView::new(
+                    services,
+                )))),
                 _ => Some(Action::Exit),
             },
             _ => None,

@@ -7,8 +7,8 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::{Action, View, consts::colors};
-use mentat_core::{Note, NoteRepository, NoteService, Result as CoreResult};
+use crate::{Action, Services, View, consts::colors};
+use mentat_core::Note;
 
 const TITLE_MAX: usize = 60;
 
@@ -20,7 +20,6 @@ enum Mode {
 }
 
 pub struct NotesView {
-    service: NoteService,
     notes: Vec<Note>,
     list_state: ListState,
     mode: Mode,
@@ -30,26 +29,20 @@ pub struct NotesView {
 }
 
 impl NotesView {
-    /// Opens the database at `path` and builds a notes view around it.
-    pub fn open(path: impl AsRef<std::path::Path>) -> CoreResult<Self> {
-        Ok(Self::new(NoteService::new(NoteRepository::open(path)?)))
-    }
-
-    pub fn new(service: NoteService) -> Self {
+    pub fn new(svc: &Services) -> Self {
         let mut view = Self {
-            service,
             notes: Vec::new(),
             list_state: ListState::default(),
             mode: Mode::Navigate,
             title_input: String::new(),
             input_cursor: 0,
         };
-        view.reload();
+        view.reload(svc);
         view
     }
 
-    fn reload(&mut self) {
-        self.notes = self.service.list_notes().unwrap_or_default();
+    fn reload(&mut self, svc: &Services) {
+        self.notes = svc.notes.list_notes().unwrap_or_default();
         if self.notes.is_empty() {
             self.list_state.select(None);
         } else {
@@ -147,7 +140,7 @@ impl NotesView {
         }
     }
 
-    fn handle_new_title(&mut self, key: KeyEvent) -> Option<Action> {
+    fn handle_new_title(&mut self, svc: &Services, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc => {
                 self.mode = Mode::Navigate;
@@ -155,8 +148,8 @@ impl NotesView {
             KeyCode::Enter => {
                 let title = self.title_input.trim();
                 if !title.is_empty() {
-                    let _ = self.service.create_note(title, "");
-                    self.reload();
+                    let _ = svc.notes.create_note(title, "");
+                    self.reload(svc);
                     self.list_state.select(Some(0));
                     self.mode = Mode::Navigate;
                 }
@@ -166,12 +159,12 @@ impl NotesView {
         None
     }
 
-    fn handle_confirm_delete(&mut self, key: KeyEvent) -> Option<Action> {
+    fn handle_confirm_delete(&mut self, svc: &Services, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Char('y') => {
                 if let Some(id) = self.selected_id() {
-                    let _ = self.service.delete_note(id);
-                    self.reload();
+                    let _ = svc.notes.delete_note(id);
+                    self.reload(svc);
                 }
                 self.mode = Mode::Navigate;
             }
@@ -219,12 +212,12 @@ impl NotesView {
 }
 
 impl View for NotesView {
-    fn handle_events(&mut self, event: Event) -> Option<Action> {
+    fn handle_events(&mut self, services: &Services, event: Event) -> Option<Action> {
         let Event::Key(key) = event else { return None };
         match self.mode {
             Mode::Navigate => self.handle_navigate(key),
-            Mode::NewTitle => self.handle_new_title(key),
-            Mode::ConfirmDelete => self.handle_confirm_delete(key),
+            Mode::NewTitle => self.handle_new_title(services, key),
+            Mode::ConfirmDelete => self.handle_confirm_delete(services, key),
         }
     }
 
@@ -336,13 +329,13 @@ impl View for NotesView {
             .map(|n| n.body.clone())
     }
 
-    fn set_note_body(&mut self, id: i64, body: &str) {
+    fn set_note_body(&mut self, svc: &Services, id: i64, body: &str) {
         let Some(note) = self.notes.iter().find(|n| n.id == id) else {
             return;
         };
         let title = note.title.clone();
-        let _ = self.service.update_note(id, &title, body);
-        self.reload();
+        let _ = svc.notes.update_note(id, &title, body);
+        self.reload(svc);
     }
 }
 

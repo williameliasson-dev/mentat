@@ -1,24 +1,25 @@
 use std::path::PathBuf;
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
+use mentat_core::{NoteRepository, NoteService};
 use ratatui::DefaultTerminal;
-use tui::{
-    Action, View,
-    views::{HomeView, NotesView},
-};
+use tui::{Action, Services, View, views::HomeView};
 
 mod editor;
 
 struct App {
+    services: Services,
     view: Box<dyn View>,
-    db_path: PathBuf,
 }
 
 impl App {
-    pub fn new() -> Self {
-        let db_path = db_path();
-        let view = Box::new(HomeView::new());
-        App { view, db_path }
+    pub fn new() -> color_eyre::Result<Self> {
+        Ok(App {
+            services: Services {
+                notes: NoteService::new(NoteRepository::open(db_path())?),
+            },
+            view: Box::new(HomeView::new()),
+        })
     }
 
     fn run_loop(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
@@ -34,15 +35,12 @@ impl App {
 
             let action = self
                 .view
-                .handle_events(event.clone())
+                .handle_events(&self.services, event.clone())
                 .or_else(|| self.handle_global(event));
 
             match action {
                 Some(Action::Exit) => break Ok(()),
                 Some(Action::SwitchTo(view)) => self.view = view,
-                Some(Action::ShowNotes) => {
-                    self.view = Box::new(NotesView::open(&self.db_path)?);
-                }
                 Some(Action::EditNote(id)) => self.edit_in_external_editor(terminal, id)?,
                 Some(Action::None) | None => {}
             }
@@ -64,7 +62,7 @@ impl App {
         *terminal = ratatui::init();
 
         if let Some(new_body) = edited? {
-            self.view.set_note_body(id, &new_body);
+            self.view.set_note_body(&self.services, id, &new_body);
         }
         Ok(())
     }
@@ -97,5 +95,5 @@ fn db_path() -> PathBuf {
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    App::new().run()
+    App::new()?.run()
 }
