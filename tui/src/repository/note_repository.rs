@@ -13,14 +13,16 @@ impl NoteRepository {
         Self { connection }
     }
 
-    pub fn create(&self, title: &str, body: &str) -> Result<Note> {
+    pub fn create(&self, folder_id: Option<i64>, title: &str, body: &str) -> Result<Note> {
         let now = now_unix();
         self.connection.execute(
-            "INSERT INTO notes (title, body, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
-            params![title, body, now],
+            "INSERT INTO notes (title, body, created_at, updated_at, folder_id)
+             VALUES (?1, ?2, ?3, ?3, ?4)",
+            params![title, body, now, folder_id],
         )?;
         Ok(Note {
             id: self.connection.last_insert_rowid(),
+            folder_id,
             title: title.to_string(),
             body: body.to_string(),
             created_at: now,
@@ -31,7 +33,8 @@ impl NoteRepository {
     pub fn get(&self, id: i64) -> Result<Note> {
         self.connection
             .query_row(
-                "SELECT id, title, body, created_at, updated_at FROM notes WHERE id = ?1",
+                "SELECT id, folder_id, title, body, created_at, updated_at
+                 FROM notes WHERE id = ?1",
                 params![id],
                 map_note,
             )
@@ -41,14 +44,31 @@ impl NoteRepository {
             })
     }
 
-    pub fn list(&self) -> Result<Vec<Note>> {
+    /// Notes directly inside `folder_id`; pass `None` for the root.
+    ///
+    /// Uses `IS` rather than `=` so a `NULL` folder matches — `= NULL` is
+    /// always false in SQL and would silently return nothing at the root.
+    pub fn list(&self, folder_id: Option<i64>) -> Result<Vec<Note>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, title, body, created_at, updated_at FROM notes ORDER BY updated_at DESC",
+            "SELECT id, folder_id, title, body, created_at, updated_at FROM notes
+             WHERE folder_id IS ?1 ORDER BY updated_at DESC",
         )?;
         let notes = stmt
-            .query_map([], map_note)?
+            .query_map(params![folder_id], map_note)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(notes)
+    }
+
+    /// Moves a note into `folder_id`, or to the root with `None`.
+    pub fn move_to(&self, id: i64, folder_id: Option<i64>) -> Result<Note> {
+        let changed = self.connection.execute(
+            "UPDATE notes SET folder_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![folder_id, now_unix(), id],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::NotFound(id));
+        }
+        self.get(id)
     }
 
     pub fn update(&self, id: i64, title: &str, body: &str) -> Result<Note> {
@@ -76,10 +96,11 @@ impl NoteRepository {
 fn map_note(row: &rusqlite::Row) -> rusqlite::Result<Note> {
     Ok(Note {
         id: row.get(0)?,
-        title: row.get(1)?,
-        body: row.get(2)?,
-        created_at: row.get(3)?,
-        updated_at: row.get(4)?,
+        folder_id: row.get(1)?,
+        title: row.get(2)?,
+        body: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
     })
 }
 

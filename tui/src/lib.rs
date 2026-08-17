@@ -5,6 +5,7 @@ use ratatui::layout::Position;
 pub mod consts;
 pub mod database;
 pub mod error;
+pub mod folder;
 pub mod markdown;
 pub mod note;
 pub mod repository;
@@ -13,9 +14,10 @@ pub mod views;
 
 pub use database::Database;
 pub use error::{CoreError, Result};
+pub use folder::Folder;
 pub use note::Note;
-pub use repository::{NoteRepository, Repositories};
-pub use service::NoteService;
+pub use repository::{FolderRepository, NoteRepository, Repositories};
+pub use service::{FolderService, NoteService};
 
 /// Every long-lived service, built once at startup and owned by `App`.
 ///
@@ -25,12 +27,14 @@ pub use service::NoteService;
 /// `Action` variants change.
 pub struct Services {
     pub notes: NoteService,
+    pub folders: FolderService,
 }
 
 impl Services {
     pub fn new(repositories: Repositories) -> Self {
         Self {
             notes: NoteService::new(repositories.notes),
+            folders: FolderService::new(repositories.folders),
         }
     }
 }

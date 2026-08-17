@@ -9,16 +9,20 @@ impl NoteService {
         Self { repository }
     }
 
-    pub fn create_note(&self, title: &str, body: &str) -> Result<Note> {
-        self.repository.create(title, body)
+    pub fn create_note(&self, folder_id: Option<i64>, title: &str, body: &str) -> Result<Note> {
+        self.repository.create(folder_id, title, body)
     }
 
     pub fn get_note(&self, id: i64) -> Result<Note> {
         self.repository.get(id)
     }
 
-    pub fn list_notes(&self) -> Result<Vec<Note>> {
-        self.repository.list()
+    pub fn list_notes(&self, folder_id: Option<i64>) -> Result<Vec<Note>> {
+        self.repository.list(folder_id)
+    }
+
+    pub fn move_note(&self, id: i64, folder_id: Option<i64>) -> Result<Note> {
+        self.repository.move_to(id, folder_id)
     }
 
     pub fn update_note(&self, id: i64, title: &str, body: &str) -> Result<Note> {

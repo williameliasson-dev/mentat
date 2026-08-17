@@ -8,8 +8,8 @@ fn service() -> NoteService {
 fn full_crud_roundtrip() {
     let svc = service();
 
-    let note = svc.create_note("Shopping", "Milk, eggs").unwrap();
-    assert_eq!(svc.list_notes().unwrap().len(), 1);
+    let note = svc.create_note(None, "Shopping", "Milk, eggs").unwrap();
+    assert_eq!(svc.list_notes(None).unwrap().len(), 1);
 
     let note = svc
         .update_note(note.id, "Shopping", "Milk, eggs, bread")
@@ -19,5 +19,5 @@ fn full_crud_roundtrip() {
     assert_eq!(svc.get_note(note.id).unwrap().title, "Shopping");
 
     svc.delete_note(note.id).unwrap();
-    assert!(svc.list_notes().unwrap().is_empty());
+    assert!(svc.list_notes(None).unwrap().is_empty());
 }

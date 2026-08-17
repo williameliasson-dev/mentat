@@ -7,7 +7,7 @@ fn repo() -> NoteRepository {
 #[test]
 fn create_and_get() {
     let repo = repo();
-    let note = repo.create("Hello", "World").unwrap();
+    let note = repo.create(None, "Hello", "World").unwrap();
     assert!(note.id > 0);
 
     let fetched = repo.get(note.id).unwrap();
@@ -23,19 +23,19 @@ fn get_missing_returns_not_found() {
 #[test]
 fn list_orders_by_updated_desc() {
     let repo = repo();
-    let a = repo.create("A", "").unwrap();
-    let b = repo.create("B", "").unwrap();
+    let a = repo.create(None, "A", "").unwrap();
+    let b = repo.create(None, "B", "").unwrap();
     // Touch A so it becomes most recently updated.
     let a = repo.update(a.id, "A2", "").unwrap();
 
-    let ids: Vec<i64> = repo.list().unwrap().iter().map(|n| n.id).collect();
+    let ids: Vec<i64> = repo.list(None).unwrap().iter().map(|n| n.id).collect();
     assert_eq!(ids, vec![a.id, b.id]);
 }
 
 #[test]
 fn update_changes_fields_and_timestamp() {
     let repo = repo();
-    let note = repo.create("Old", "Old body").unwrap();
+    let note = repo.create(None, "Old", "Old body").unwrap();
     let updated = repo.update(note.id, "New", "New body").unwrap();
 
     assert_eq!(updated.title, "New");
@@ -56,7 +56,7 @@ fn update_missing_returns_not_found() {
 #[test]
 fn delete_removes_note() {
     let repo = repo();
-    let note = repo.create("Doomed", "").unwrap();
+    let note = repo.create(None, "Doomed", "").unwrap();
     repo.delete(note.id).unwrap();
     assert!(matches!(repo.get(note.id), Err(CoreError::NotFound(_))));
 }
