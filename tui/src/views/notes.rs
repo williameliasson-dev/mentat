@@ -1,13 +1,13 @@
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
-use crate::{Action, Folder, Note, Services, View, consts::colors};
+use crate::{Action, Folder, Note, Services, View, consts::colors, service::transfer};
 
 const TITLE_MAX: usize = 60;
 
@@ -15,11 +15,43 @@ const TITLE_MAX: usize = 60;
 const FOLDER_ICON: &str = "\u{f07b}"; // nf-fa-folder
 const NOTE_ICON: &str = "\u{f15c}"; // nf-fa-file_text
 
+/// Gutter marker for a selected entry.
+const MARK: &str = "\u{f00c} "; // nf-fa-check
+
 #[derive(PartialEq)]
 enum Mode {
     Navigate,
     Create,
+    Rename,
     ConfirmDelete,
+}
+
+impl Mode {
+    /// Whether the input line is live — it owns the keyboard and the cursor.
+    fn is_input(&self) -> bool {
+        matches!(self, Mode::Create | Mode::Rename)
+    }
+}
+
+/// Identifies an entry across reloads and across folders. Note and folder ids
+/// come from different tables and overlap, so the kind has to travel with it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EntryId {
+    Folder(i64),
+    Note(i64),
+}
+
+/// What `p` will do with the clipboard.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Op {
+    Cut,
+    Copy,
+}
+
+/// Entries waiting on a paste, and what to do with them.
+struct Clipboard {
+    op: Op,
+    items: Vec<EntryId>,
 }
 
 /// One row in a listing. Folders sort ahead of notes.
@@ -29,6 +61,13 @@ enum Entry {
 }
 
 impl Entry {
+    fn id(&self) -> EntryId {
+        match self {
+            Entry::Folder(f) => EntryId::Folder(f.id),
+            Entry::Note(n) => EntryId::Note(n.id),
+        }
+    }
+
     fn label(&self) -> String {
         match self {
             Entry::Folder(f) => format!("{FOLDER_ICON} {}/", f.name),
@@ -87,6 +126,15 @@ pub struct NotesView {
     input: String,
     /// Byte cursor within `input`.
     input_cursor: usize,
+    /// Marked entries, in the order they were marked. Kept across folder
+    /// changes so a selection can be gathered from several places before
+    /// acting on it. A `Vec` rather than a set: selections are small, and the
+    /// order decides the order operations report in.
+    marks: Vec<EntryId>,
+    /// Populated by `x`/`y`, drained by `p`.
+    clipboard: Option<Clipboard>,
+    /// Footer message for the last action; cleared by the next keypress.
+    status: Option<String>,
 }
 
 impl NotesView {
@@ -99,6 +147,9 @@ impl NotesView {
             mode: Mode::Navigate,
             input: String::new(),
             input_cursor: 0,
+            marks: Vec::new(),
+            clipboard: None,
+            status: None,
         };
         view.reload(services);
         view
@@ -197,26 +248,207 @@ impl NotesView {
         }
     }
 
+    // -- Selection ------------------------------------------------------------
+
+    /// What an action applies to: everything marked, or the entry under the
+    /// cursor when nothing is marked.
+    fn targets(&self) -> Vec<EntryId> {
+        if self.marks.is_empty() {
+            self.selected().map(Entry::id).into_iter().collect()
+        } else {
+            self.marks.clone()
+        }
+    }
+
+    /// Whether this entry is staged for a move — it renders dimmed until the
+    /// paste happens.
+    fn is_cut(&self, id: EntryId) -> bool {
+        self.clipboard
+            .as_ref()
+            .is_some_and(|c| c.op == Op::Cut && c.items.contains(&id))
+    }
+
+    fn toggle_mark(&mut self, services: &Services) {
+        let Some(id) = self.selected().map(Entry::id) else {
+            return;
+        };
+        match self.marks.iter().position(|m| *m == id) {
+            Some(i) => {
+                self.marks.remove(i);
+            }
+            None => self.marks.push(id),
+        }
+        // Marking walks down the list, so a run can be marked with repeated
+        // taps of space — as in yazi.
+        self.select_next(services);
+    }
+
+    /// Marks everything here, or clears the marks if it's all marked already.
+    fn toggle_mark_all(&mut self) {
+        let here: Vec<EntryId> = self.entries.iter().map(Entry::id).collect();
+        if here.iter().all(|id| self.marks.contains(id)) {
+            self.marks.retain(|id| !here.contains(id));
+        } else {
+            for id in here {
+                if !self.marks.contains(&id) {
+                    self.marks.push(id);
+                }
+            }
+        }
+        self.status = Some(format!("{} marked", self.marks.len()));
+    }
+
+    fn clear_selection(&mut self) {
+        self.marks.clear();
+        self.clipboard = None;
+    }
+
+    /// `x` and `y`: load the targets into the clipboard.
+    fn stage(&mut self, op: Op) {
+        let items = self.targets();
+        if items.is_empty() {
+            return;
+        }
+        self.status = Some(format!(
+            "{} {}",
+            items.len(),
+            match op {
+                Op::Cut => "cut",
+                Op::Copy => "copied",
+            }
+        ));
+        self.clipboard = Some(Clipboard { op, items });
+        // The clipboard now carries the selection; cut entries show dimmed and
+        // copied ones need no marker, so leaving ticks behind only confuses.
+        self.marks.clear();
+    }
+
+    /// `p`: drop the clipboard into the folder currently open.
+    ///
+    /// A cut is consumed by its paste; a copy stays on the clipboard so it can
+    /// be pasted into several places.
+    fn paste(&mut self, services: &Services) {
+        let Some(clipboard) = self.clipboard.take() else {
+            self.status = Some("nothing to paste".to_string());
+            return;
+        };
+        let dest = self.folder_id();
+
+        let mut done = 0usize;
+        let mut failure = None;
+        for id in &clipboard.items {
+            let result = match (clipboard.op, id) {
+                (Op::Cut, EntryId::Note(id)) => services.notes.move_note(*id, dest).map(drop),
+                (Op::Cut, EntryId::Folder(id)) => services.folders.move_folder(*id, dest).map(drop),
+                (Op::Copy, EntryId::Note(id)) => services
+                    .notes
+                    .get_note(*id)
+                    .and_then(|n| transfer::copy_note(services, &n, dest))
+                    .map(drop),
+                (Op::Copy, EntryId::Folder(id)) => services
+                    .folders
+                    .get_folder(*id)
+                    .and_then(|f| transfer::copy_folder(services, &f, dest))
+                    .map(drop),
+            };
+            match result {
+                Ok(()) => done += 1,
+                // First failure is the one worth reading; the rest are usually
+                // the same cause repeated.
+                Err(e) => failure = failure.or(Some(e.to_string())),
+            }
+        }
+
+        let verb = match clipboard.op {
+            Op::Cut => "moved",
+            Op::Copy => "copied",
+        };
+        self.status = Some(match failure {
+            Some(reason) => format!(
+                "{verb} {done}, {} failed — {reason}",
+                clipboard.items.len() - done
+            ),
+            None => format!("{verb} {done}"),
+        });
+
+        if clipboard.op == Op::Copy {
+            self.clipboard = Some(clipboard);
+        }
+        self.reload(services);
+    }
+
+    fn delete_targets(&mut self, services: &Services) {
+        let mut failure = None;
+        for id in self.targets() {
+            let result = match id {
+                EntryId::Folder(id) => services.folders.delete_folder(id),
+                EntryId::Note(id) => services.notes.delete_note(id),
+            };
+            if let Err(e) = result {
+                failure = failure.or(Some(e.to_string()));
+            }
+        }
+        self.status = failure.map(|reason| format!("delete failed — {reason}"));
+        // Deleted ids must not linger in either buffer: a later paste would
+        // chase rows that no longer exist.
+        self.clear_selection();
+        self.reload(services);
+    }
+
     fn instructions(&self) -> Line<'static> {
         let key = |s: &'static str| Span::styled(s, Style::new().fg(colors::SAND).bold());
         let text = |s: &'static str| Span::styled(s, Style::new().fg(colors::DIM));
         match self.mode {
-            Mode::Navigate => Line::from(vec![
-                text(" Move "),
-                key("<j/k>"),
-                text(" Up "),
-                key("<h>"),
-                text(" Open "),
-                key("<l>"),
-                text(" Add "),
-                key("<a>"),
-                text(" Delete "),
-                key("<d>"),
-                text(" Home "),
-                key("<esc>"),
-                text(" Quit "),
-                key("<q>"),
-            ]),
+            // A message about the last action displaces the hints — it's the
+            // only feedback a paste or a failed move gets.
+            Mode::Navigate => match &self.status {
+                Some(message) => Line::from(vec![
+                    Span::styled(" ▪ ", Style::new().fg(colors::SAND)),
+                    Span::styled(message.clone(), Style::new().fg(colors::TEXT)),
+                ]),
+                None => {
+                    let mut spans = vec![
+                        text(" Nav "),
+                        key("<hjkl>"),
+                        text(" Mark "),
+                        key("<space>"),
+                        text(" Cut "),
+                        key("<x>"),
+                        text(" Copy "),
+                        key("<y>"),
+                        text(" Paste "),
+                        key("<p>"),
+                        text(" Add "),
+                        key("<a>"),
+                        text(" Rename "),
+                        key("<r>"),
+                        text(" Del "),
+                        key("<d>"),
+                    ];
+                    // Badges last: they only appear mid-selection, and the
+                    // hints shouldn't jump sideways when they do.
+                    if !self.marks.is_empty() {
+                        spans.push(Span::styled(
+                            format!("  {} marked", self.marks.len()),
+                            Style::new().fg(colors::SAND).bold(),
+                        ));
+                    }
+                    if let Some(clipboard) = &self.clipboard {
+                        spans.push(Span::styled(
+                            format!(
+                                "  {} {}",
+                                clipboard.items.len(),
+                                match clipboard.op {
+                                    Op::Cut => "cut",
+                                    Op::Copy => "copied",
+                                }
+                            ),
+                            Style::new().fg(colors::IBAD).bold(),
+                        ));
+                    }
+                    Line::from(spans)
+                }
+            },
             Mode::Create => Line::from(vec![
                 text(" Create "),
                 key("<Enter>"),
@@ -225,6 +457,12 @@ impl NotesView {
                 text("   trailing "),
                 key("/"),
                 text(" makes a folder"),
+            ]),
+            Mode::Rename => Line::from(vec![
+                text(" Rename "),
+                key("<Enter>"),
+                text(" Cancel "),
+                key("<Esc>"),
             ]),
             Mode::ConfirmDelete => Line::from(vec![
                 text(" Delete? "),
@@ -236,9 +474,42 @@ impl NotesView {
     }
 
     fn handle_navigate(&mut self, services: &Services, key: KeyEvent) -> Option<Action> {
+        // Last action's message has been read by now.
+        self.status = None;
+
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            if let KeyCode::Char('a') = key.code {
+                self.toggle_mark_all();
+            }
+            return None;
+        }
+
         match key.code {
             KeyCode::Char('q') => Some(Action::Exit),
-            KeyCode::Esc => Some(Action::SwitchTo(Box::new(crate::views::HomeView::new()))),
+            // Esc backs out of a selection first; only an idle Esc leaves.
+            KeyCode::Esc => {
+                if self.marks.is_empty() && self.clipboard.is_none() {
+                    return Some(Action::SwitchTo(Box::new(crate::views::HomeView::new())));
+                }
+                self.clear_selection();
+                None
+            }
+            KeyCode::Char(' ') => {
+                self.toggle_mark(services);
+                None
+            }
+            KeyCode::Char('x') => {
+                self.stage(Op::Cut);
+                None
+            }
+            KeyCode::Char('y') => {
+                self.stage(Op::Copy);
+                None
+            }
+            KeyCode::Char('p') => {
+                self.paste(services);
+                None
+            }
             KeyCode::Char('j') | KeyCode::Down => {
                 self.select_next(services);
                 None
@@ -251,6 +522,10 @@ impl NotesView {
                 self.mode = Mode::Create;
                 self.input.clear();
                 self.input_cursor = 0;
+                None
+            }
+            KeyCode::Char('r') => {
+                self.begin_rename();
                 None
             }
             KeyCode::Char('h') | KeyCode::Char('-') | KeyCode::Backspace | KeyCode::Left => {
@@ -266,7 +541,7 @@ impl NotesView {
                 None => None,
             },
             KeyCode::Char('d') => {
-                if self.selected().is_some() {
+                if !self.targets().is_empty() {
                     self.mode = Mode::ConfirmDelete;
                 }
                 None
@@ -297,19 +572,50 @@ impl NotesView {
         None
     }
 
+    /// Opens the input line preloaded with the current name, cursor at the end
+    /// — a rename is usually a tweak, not a retype.
+    fn begin_rename(&mut self) {
+        let Some(entry) = self.selected() else { return };
+        self.input = match entry {
+            Entry::Folder(f) => f.name.clone(),
+            Entry::Note(n) => n.title.clone(),
+        };
+        self.input_cursor = self.input.len();
+        self.mode = Mode::Rename;
+    }
+
+    fn handle_rename(&mut self, services: &Services, key: KeyEvent) -> Option<Action> {
+        match key.code {
+            KeyCode::Esc => self.mode = Mode::Navigate,
+            KeyCode::Enter => {
+                let name = self.input.trim().to_string();
+                // An empty name would leave an unclickable row; stay in the
+                // input instead of committing it.
+                if name.is_empty() {
+                    return None;
+                }
+                let result = match self.selected() {
+                    Some(Entry::Folder(f)) => services.folders.rename_folder(f.id, &name).map(drop),
+                    Some(Entry::Note(n)) => {
+                        services.notes.update_note(n.id, &name, &n.body).map(drop)
+                    }
+                    None => Ok(()),
+                };
+                if let Err(e) = result {
+                    self.status = Some(format!("rename failed — {e}"));
+                }
+                self.reload(services);
+                self.mode = Mode::Navigate;
+            }
+            _ => self.edit_input(key),
+        }
+        None
+    }
+
     fn handle_confirm_delete(&mut self, services: &Services, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Char('y') => {
-                match self.selected() {
-                    Some(Entry::Folder(f)) => {
-                        let _ = services.folders.delete_folder(f.id);
-                    }
-                    Some(Entry::Note(n)) => {
-                        let _ = services.notes.delete_note(n.id);
-                    }
-                    None => {}
-                }
-                self.reload(services);
+                self.delete_targets(services);
                 self.mode = Mode::Navigate;
             }
             KeyCode::Char('n') | KeyCode::Esc => self.mode = Mode::Navigate,
@@ -348,6 +654,56 @@ impl NotesView {
             KeyCode::End => self.input_cursor = self.input.len(),
             _ => {}
         }
+    }
+
+    /// The confirmation pane — always lists what's going, since `d` can now
+    /// take a selection built up across several folders.
+    fn confirm_delete_lines(&self) -> Vec<Line<'static>> {
+        const LISTED: usize = 12;
+
+        let targets = self.targets();
+        let mut lines = vec![
+            Line::from(Span::styled(
+                match targets.len() {
+                    1 => "Delete this?".to_string(),
+                    n => format!("Delete these {n}?"),
+                },
+                Style::new().fg(colors::DANGER).bold(),
+            )),
+            Line::from(Span::styled(
+                "Folders take everything inside them.",
+                Style::new().fg(colors::DIM),
+            )),
+            Line::from(""),
+        ];
+
+        for id in targets.iter().take(LISTED) {
+            // A mark made in another folder isn't in `entries` to name, but
+            // it's still going — say so rather than silently omitting it.
+            let entry = self.entries.iter().find(|e| e.id() == *id);
+            lines.push(match entry {
+                Some(e) => Line::from(Span::styled(e.label(), e.style())),
+                None => Line::from(Span::styled(
+                    "marked in another folder",
+                    Style::new().fg(colors::DIM).italic(),
+                )),
+            });
+        }
+        if targets.len() > LISTED {
+            lines.push(Line::from(Span::styled(
+                format!("… and {} more", targets.len() - LISTED),
+                Style::new().fg(colors::DIM),
+            )));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("<y>", Style::new().fg(colors::DANGER).bold()),
+            Span::styled(" delete   ", Style::new().fg(colors::DIM)),
+            Span::styled("<n>", Style::new().fg(colors::SAND).bold()),
+            Span::styled(" cancel", Style::new().fg(colors::DIM)),
+        ]));
+        lines
     }
 
     /// The preview pane: title, contents, and the accent that tells a note
@@ -421,6 +777,7 @@ impl View for NotesView {
         match self.mode {
             Mode::Navigate => self.handle_navigate(services, key),
             Mode::Create => self.handle_create(services, key),
+            Mode::Rename => self.handle_rename(services, key),
             Mode::ConfirmDelete => self.handle_confirm_delete(services, key),
         }
     }
@@ -454,7 +811,30 @@ impl View for NotesView {
         let items: Vec<ListItem> = self
             .entries
             .iter()
-            .map(|e| ListItem::new(e.label()).style(e.style()))
+            .map(|e| {
+                let id = e.id();
+                let mut style = e.style();
+                // Cut entries are still here until the paste lands; dimming
+                // them shows they're in flight.
+                if self.is_cut(id) {
+                    style = style.add_modifier(Modifier::DIM | Modifier::ITALIC);
+                }
+                let marked = self.marks.contains(&id);
+                let tick = if marked {
+                    Span::styled(MARK, Style::new().fg(colors::SAND).bold())
+                } else {
+                    // Same width as the tick, so labels stay in one column.
+                    Span::raw(" ".repeat(MARK.chars().count()))
+                };
+                let row = ListItem::new(Line::from(vec![tick, Span::styled(e.label(), style)]));
+                // Set on the item rather than the spans so the tint runs the
+                // full width of the row, not just under the text.
+                if marked {
+                    row.style(Style::new().bg(colors::MARKED))
+                } else {
+                    row
+                }
+            })
             .collect();
         // The cursor takes the kind's color, so hovering a note never looks
         // like hovering a folder.
@@ -467,31 +847,21 @@ impl View for NotesView {
         frame.render_stateful_widget(list, panes[0], &mut state);
 
         match self.mode {
-            Mode::Create => {
+            Mode::Create | Mode::Rename => {
+                let title = match self.mode {
+                    Mode::Rename => " Rename ",
+                    _ => " New name ",
+                };
                 let p = Paragraph::new(self.input.as_str())
                     .style(Style::new().fg(colors::TEXT))
-                    .block(pane_block(" New name ", colors::SAND));
+                    .block(pane_block(title, colors::SAND));
                 frame.render_widget(p, panes[1]);
             }
             Mode::ConfirmDelete => {
-                let line = match self.selected() {
-                    Some(Entry::Folder(f)) => Line::from(vec![
-                        Span::styled(" Delete folder ", Style::new().fg(colors::DANGER)),
-                        Span::styled(f.name.clone(), Style::new().fg(colors::TEXT).bold()),
-                        Span::styled(
-                            " and everything inside it? <y/n>",
-                            Style::new().fg(colors::DANGER),
-                        ),
-                    ]),
-                    Some(Entry::Note(n)) => Line::from(vec![
-                        Span::styled(" Delete ", Style::new().fg(colors::DANGER)),
-                        Span::styled(n.title.clone(), Style::new().fg(colors::TEXT).bold()),
-                        Span::styled("? <y/n>", Style::new().fg(colors::DANGER)),
-                    ]),
-                    None => Line::from(""),
-                };
                 frame.render_widget(
-                    Paragraph::new(line).block(pane_block(" Confirm ", colors::DANGER)),
+                    Paragraph::new(self.confirm_delete_lines())
+                        .block(pane_block(" Confirm ", colors::DANGER))
+                        .wrap(Wrap { trim: false }),
                     panes[1],
                 );
             }
@@ -511,7 +881,7 @@ impl View for NotesView {
     }
 
     fn cursor_position(&self) -> Option<Position> {
-        if self.mode != Mode::Create {
+        if !self.mode.is_input() {
             return None;
         }
         // Recompute the same layout used in `render` — cheap and stateless.
@@ -528,7 +898,10 @@ impl View for NotesView {
             horizontal: 1,
             vertical: 1,
         });
-        Some(Position::new(inner.x + self.input_cursor as u16, inner.y))
+        // `input_cursor` is a byte offset; the terminal wants columns, and a
+        // renamed entry can easily carry non-ASCII in its name.
+        let column = self.input[..self.input_cursor].chars().count() as u16;
+        Some(Position::new(inner.x + column, inner.y))
     }
 
     fn note_body(&self, id: i64) -> Option<String> {

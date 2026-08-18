@@ -55,6 +55,33 @@ impl FolderRepository {
         Ok(folders)
     }
 
+    /// Moves a folder under `parent_id`, or to the root with `None`.
+    ///
+    /// Cycle-checking is the caller's job — see `FolderService::move_folder`.
+    pub fn move_to(&self, id: i64, parent_id: Option<i64>) -> Result<Folder> {
+        let changed = self.connection.execute(
+            "UPDATE folders SET parent_id = ?1 WHERE id = ?2",
+            params![parent_id, id],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::NotFound(id));
+        }
+        self.get(id)
+    }
+
+    /// Whether `id` is `ancestor` itself or sits anywhere beneath it. Walks up
+    /// from `id`, one query per level — trees here are shallow.
+    pub fn is_descendant_of(&self, id: i64, ancestor: i64) -> Result<bool> {
+        let mut current = Some(id);
+        while let Some(folder) = current {
+            if folder == ancestor {
+                return Ok(true);
+            }
+            current = self.get(folder)?.parent_id;
+        }
+        Ok(false)
+    }
+
     pub fn rename(&self, id: i64, name: &str) -> Result<Folder> {
         let changed = self.connection.execute(
             "UPDATE folders SET name = ?1 WHERE id = ?2",

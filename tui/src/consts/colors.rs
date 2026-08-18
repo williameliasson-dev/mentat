@@ -18,6 +18,10 @@ pub const TEXT: Color = Color::Rgb(210, 200, 185);
 /// it's desaturated and matched to SAND's luminance rather than a true blue.
 pub const IBAD: Color = Color::Rgb(127, 153, 165);
 
+/// Background for a marked row: sand pushed down into shadow, so a selection
+/// reads across the whole row without competing with the cursor.
+pub const MARKED: Color = Color::Rgb(58, 48, 33);
+
 /// Danger: destructive confirmations (delete prompts).
 pub const DANGER: Color = Color::Rgb(200, 90, 70);
 
