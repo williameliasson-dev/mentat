@@ -11,6 +11,10 @@ use crate::{Action, Folder, Note, Services, View, consts::colors};
 
 const TITLE_MAX: usize = 60;
 
+// Might wanna configurable down the road due to nerd font
+const FOLDER_ICON: &str = "\u{f07b}"; // nf-fa-folder
+const NOTE_ICON: &str = "\u{f15c}"; // nf-fa-file_text
+
 #[derive(PartialEq)]
 enum Mode {
     Navigate,
@@ -27,15 +31,23 @@ enum Entry {
 impl Entry {
     fn label(&self) -> String {
         match self {
-            Entry::Folder(f) => format!("{}/", f.name),
-            Entry::Note(n) => n.title.clone(),
+            Entry::Folder(f) => format!("{FOLDER_ICON} {}/", f.name),
+            Entry::Note(n) => format!("{NOTE_ICON} {}", n.title),
         }
     }
 
     fn style(&self) -> Style {
         match self {
             Entry::Folder(_) => Style::new().fg(colors::SAND).bold(),
-            Entry::Note(_) => Style::new().fg(colors::TEXT),
+            Entry::Note(_) => Style::new().fg(colors::IBAD),
+        }
+    }
+
+    /// Accent for the preview pane's border and title.
+    fn accent(&self) -> Color {
+        match self {
+            Entry::Folder(_) => colors::SAND,
+            Entry::Note(_) => colors::IBAD,
         }
     }
 }
@@ -190,16 +202,18 @@ impl NotesView {
         let text = |s: &'static str| Span::styled(s, Style::new().fg(colors::DIM));
         match self.mode {
             Mode::Navigate => Line::from(vec![
+                text(" Move "),
+                key("<j/k>"),
+                text(" Up "),
+                key("<h>"),
+                text(" Open "),
+                key("<l>"),
                 text(" Add "),
                 key("<a>"),
-                text(" Open "),
-                key("<enter>"),
-                text(" Up "),
-                key("<->"),
                 text(" Delete "),
                 key("<d>"),
                 text(" Home "),
-                key("<h>"),
+                key("<esc>"),
                 text(" Quit "),
                 key("<q>"),
             ]),
@@ -224,7 +238,7 @@ impl NotesView {
     fn handle_navigate(&mut self, services: &Services, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Char('q') => Some(Action::Exit),
-            KeyCode::Char('h') => Some(Action::SwitchTo(Box::new(crate::views::HomeView::new()))),
+            KeyCode::Esc => Some(Action::SwitchTo(Box::new(crate::views::HomeView::new()))),
             KeyCode::Char('j') | KeyCode::Down => {
                 self.select_next(services);
                 None
@@ -239,11 +253,11 @@ impl NotesView {
                 self.input_cursor = 0;
                 None
             }
-            KeyCode::Char('-') | KeyCode::Backspace | KeyCode::Left => {
+            KeyCode::Char('h') | KeyCode::Char('-') | KeyCode::Backspace | KeyCode::Left => {
                 self.go_up(services);
                 None
             }
-            KeyCode::Enter | KeyCode::Right => match self.selected() {
+            KeyCode::Char('l') | KeyCode::Enter | KeyCode::Right => match self.selected() {
                 Some(Entry::Folder(_)) => {
                     self.open_selected_folder(services);
                     None
@@ -336,32 +350,66 @@ impl NotesView {
         }
     }
 
-    /// The preview pane: a note's rendered body, or a folder's contents.
-    fn preview(&self) -> (String, Paragraph<'_>) {
+    /// The preview pane: title, contents, and the accent that tells a note
+    /// apart from a folder without reading a word of it.
+    /// `width` is the pane's inner width, so the header rule spans it exactly
+    /// instead of wrapping onto a second line.
+    fn preview(&self, width: usize) -> (String, Vec<Line<'static>>, Color) {
+        let dim = |s: String| Line::from(Span::styled(s, Style::new().fg(colors::DIM)));
+        let rule = |color| rule(color, width);
+
         match self.selected() {
-            Some(Entry::Note(n)) => (
-                format!(" {} ", n.title),
-                Paragraph::new(crate::markdown::render(&n.body)),
-            ),
-            Some(Entry::Folder(f)) => {
-                let title = format!(" {}/ ", f.name);
-                if self.peek.is_empty() {
-                    return (
-                        title,
-                        Paragraph::new("empty").style(Style::new().fg(colors::DIM)),
-                    );
+            Some(Entry::Note(n)) => {
+                let words = n.body.split_whitespace().count();
+                let mut lines = vec![
+                    dim(format!(
+                        "note · {words} words · edited {}",
+                        relative(n.updated_at)
+                    )),
+                    rule(colors::IBAD),
+                ];
+                if n.body.trim().is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        "empty — <enter> to write",
+                        Style::new().fg(colors::DIM).italic(),
+                    )));
+                } else {
+                    lines.extend(crate::markdown::render(&n.body));
                 }
-                let lines: Vec<Line> = self
+                (format!(" {NOTE_ICON} {} ", n.title), lines, colors::IBAD)
+            }
+            Some(Entry::Folder(f)) => {
+                let folders = self
                     .peek
                     .iter()
-                    .map(|e| Line::from(Span::styled(e.label(), e.style())))
-                    .collect();
-                (title, Paragraph::new(lines))
+                    .filter(|e| matches!(e, Entry::Folder(_)))
+                    .count();
+                let notes = self.peek.len() - folders;
+                let mut lines = vec![
+                    dim(format!("folder · {folders} folders · {notes} notes")),
+                    rule(colors::SAND),
+                ];
+                if self.peek.is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        "empty",
+                        Style::new().fg(colors::DIM).italic(),
+                    )));
+                } else {
+                    lines.extend(
+                        self.peek
+                            .iter()
+                            .map(|e| Line::from(Span::styled(e.label(), e.style()))),
+                    );
+                }
+                (format!(" {FOLDER_ICON} {}/ ", f.name), lines, colors::SAND)
             }
             None => (
                 " / ".to_string(),
-                Paragraph::new("Empty. <a> to add — end with / for a folder.")
-                    .style(Style::new().fg(colors::DIM)),
+                vec![Line::from(Span::styled(
+                    "Empty. <a> to add — end with / for a folder.",
+                    Style::new().fg(colors::DIM),
+                ))],
+                colors::DIM,
             ),
         }
     }
@@ -393,11 +441,11 @@ impl View for NotesView {
         let panes = Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(65)])
             .split(layout[1]);
 
-        let pane_block = |title: &str| {
+        let pane_block = |title: &str, accent: Color| {
             Block::new()
                 .title(Span::styled(
                     title.to_string(),
-                    Style::new().fg(colors::SAND),
+                    Style::new().fg(accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_style(Style::new().fg(colors::DIM))
@@ -408,9 +456,12 @@ impl View for NotesView {
             .iter()
             .map(|e| ListItem::new(e.label()).style(e.style()))
             .collect();
+        // The cursor takes the kind's color, so hovering a note never looks
+        // like hovering a folder.
+        let cursor = self.selected().map_or(colors::SAND, Entry::accent);
         let list = List::new(items)
-            .block(pane_block(&self.breadcrumb()))
-            .highlight_style(Style::new().fg(Color::Black).bg(colors::SAND).bold())
+            .block(pane_block(&self.breadcrumb(), colors::SAND))
+            .highlight_style(Style::new().fg(Color::Black).bg(cursor).bold())
             .highlight_symbol("> ");
         let mut state = self.list_state;
         frame.render_stateful_widget(list, panes[0], &mut state);
@@ -419,7 +470,7 @@ impl View for NotesView {
             Mode::Create => {
                 let p = Paragraph::new(self.input.as_str())
                     .style(Style::new().fg(colors::TEXT))
-                    .block(pane_block(" New name "));
+                    .block(pane_block(" New name ", colors::SAND));
                 frame.render_widget(p, panes[1]);
             }
             Mode::ConfirmDelete => {
@@ -440,14 +491,17 @@ impl View for NotesView {
                     None => Line::from(""),
                 };
                 frame.render_widget(
-                    Paragraph::new(line).block(pane_block(" Confirm ")),
+                    Paragraph::new(line).block(pane_block(" Confirm ", colors::DANGER)),
                     panes[1],
                 );
             }
             Mode::Navigate => {
-                let (title, p) = self.preview();
+                let inner_width = panes[1].width.saturating_sub(2) as usize;
+                let (title, lines, accent) = self.preview(inner_width);
                 frame.render_widget(
-                    p.block(pane_block(&title)).wrap(Wrap { trim: false }),
+                    Paragraph::new(lines)
+                        .block(pane_block(&title, accent))
+                        .wrap(Wrap { trim: false }),
                     panes[1],
                 );
             }
@@ -492,6 +546,26 @@ impl View for NotesView {
         let Some(title) = title else { return };
         let _ = services.notes.update_note(id, &title, body);
         self.reload(services);
+    }
+}
+
+/// Separator under the preview header, in the pane's accent.
+fn rule(color: Color, width: usize) -> Line<'static> {
+    Line::from(Span::styled("─".repeat(width), Style::new().fg(color)))
+}
+
+/// Coarse "how long ago" for the preview header — precision past days isn't
+/// worth a date-formatting dependency.
+fn relative(ts: i64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(ts);
+    match (now - ts).max(0) {
+        s if s < 60 => "just now".to_string(),
+        s if s < 3600 => format!("{}m ago", s / 60),
+        s if s < 86_400 => format!("{}h ago", s / 3600),
+        s => format!("{}d ago", s / 86_400),
     }
 }
 
