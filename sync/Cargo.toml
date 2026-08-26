@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "sync"
 version = "0.1.0"
@@ -8,9 +10,12 @@ edition = "2024"
 
 [dependencies]
 axum = "0.8.9"
+chrono = { version = "0.4.45", features = ["serde"] }
 serde = "1.0.229"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "macros"] }
 thiserror = "2.0.19"
 tokio = { version = "1", features = ["full"] }
+uuid = { version = "1.25.0", features = ["v4", "serde"] }
 
 [lib]
 name ="sync"
