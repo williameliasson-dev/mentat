@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tui",
+    "sync",
 ]
 resolver = "3"
 

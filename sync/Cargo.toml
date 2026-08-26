@@ -1,0 +1,17 @@
+[package]
+name = "sync"
+version = "0.1.0"
+description = "sync server"
+authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+serde = "1.0.229"
+thiserror = "2.0.19"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name ="sync"
+path ="src/lib.rs"
