@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use sync::Services;
 use sync::app::app;
 use sync::database::Database;
 
@@ -9,8 +10,9 @@ async fn main() {
     let db = Database::connect(&database_url)
         .await
         .expect("failed to connect to database");
+    let services = Services::new(db.repositories());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app(db.pool)).await.unwrap();
+    axum::serve(listener, app(services)).await.unwrap();
 }
