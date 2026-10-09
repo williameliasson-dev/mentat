@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
+use proto::pb::account::v1::accounts_server::AccountsServer;
 use sync::grpc::AccountsRpc;
-use sync::pb::account::v1::accounts_server::AccountsServer;
 use sync::service::Services;
 use sync::Database;
 

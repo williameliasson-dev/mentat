@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "tui",
+    "sync",
+    "proto",
 ]
 resolver = "3"
 

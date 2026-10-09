@@ -4,9 +4,6 @@ fn main() {
     unsafe { std::env::set_var("PROTOC", protoc) };
 
     tonic_prost_build::configure()
-        .compile_protos(
-            &["sync/account/v1/account.proto"],
-            &["proto"],
-        )
+        .compile_protos(&["sync/account/v1/account.proto"], &["proto"])
         .expect("proto compilation");
 }

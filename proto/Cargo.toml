@@ -1,0 +1,22 @@
+[package]
+name = "proto"
+version = "0.1.0"
+description = "Shared protobuf schemas and generated gRPC types (server + client)"
+authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
+license = "MIT"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+prost = "0.14.4"
+prost-types = "0.14.4"
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
+
+[build-dependencies]
+protoc-bin-vendored = "3.3.0"
+tonic-prost-build = "0.14.6"
+
+[lib]
+name = "proto"
+path = "src/lib.rs"

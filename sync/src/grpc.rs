@@ -4,8 +4,8 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::model::Account;
-use crate::pb::account::v1::accounts_server::Accounts;
-use crate::pb::account::v1::{
+use proto::pb::account::v1::accounts_server::Accounts;
+use proto::pb::account::v1::{
     Account as PbAccount, AuthenticateRequest, AuthenticateResponse, CreateAccountRequest,
     CreateAccountResponse, GetAccountRequest, GetAccountResponse,
 };
@@ -64,7 +64,7 @@ fn parse_id(request: &Request<GetAccountRequest>) -> std::result::Result<Uuid, S
 fn pb_account(account: Account) -> PbAccount {
     PbAccount {
         id: account.id.to_string(),
-        created_at: Some(prost_types::Timestamp::from(SystemTime::from(
+        created_at: Some(proto::prost_types::Timestamp::from(SystemTime::from(
             account.created_at,
         ))),
     }
