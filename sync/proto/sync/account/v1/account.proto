@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package sync.account.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service Accounts {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+}
+
+message CreateAccountRequest {}
+
+message CreateAccountResponse {
+  Account account = 1;
+  // Plaintext account key. Only ever returned here, once, at creation.
+  string account_key = 2;
+}
+
+message GetAccountRequest {
+  string id = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+message AuthenticateRequest {
+  string account_key = 1;
+}
+
+message AuthenticateResponse {
+  Account account = 1;
+}
+
+message Account {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}

@@ -1,6 +1,4 @@
-use axum::extract::rejection::JsonRejection;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use tonic::Status;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -8,25 +6,17 @@ pub enum SyncError {
     #[error("account not found")]
     NotFound,
 
-    #[error("database error: {0}")]
+    #[error("database error")]
     Database(#[from] sqlx::Error),
-
-    #[error("invalid request body: {0}")]
-    InvalidJson(#[from] JsonRejection),
-
-    #[error("validation failed: {0}")]
-    Validation(#[from] garde::Report),
 }
 
 pub type Result<T> = std::result::Result<T, SyncError>;
 
-impl IntoResponse for SyncError {
-    fn into_response(self) -> Response {
-        let status = match &self {
-            SyncError::NotFound => StatusCode::NOT_FOUND,
-            SyncError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            SyncError::InvalidJson(_) | SyncError::Validation(_) => StatusCode::BAD_REQUEST,
-        };
-        (status, self.to_string()).into_response()
+impl From<SyncError> for Status {
+    fn from(error: SyncError) -> Self {
+        match &error {
+            SyncError::NotFound => Status::not_found(error.to_string()),
+            SyncError::Database(_) => Status::internal("internal error"),
+        }
     }
 }

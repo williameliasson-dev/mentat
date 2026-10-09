@@ -7,18 +7,24 @@ description = "sync server"
 authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
 license = "MIT"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
-axum = "0.8.9"
-chrono = { version = "0.4.45", features = ["serde"] }
-garde = { version = "0.23.0", features = ["derive"] }
+chrono = "0.4.45"
 hex = "0.4.3"
-serde = { version = "1.0.229", features = ["derive"] }
+prost = "0.14.4"
+prost-types = "0.14.4"
 sha2 = "0.11.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "macros"] }
 thiserror = "2.0.19"
 tokio = { version = "1", features = ["full"] }
-uuid = { version = "1.25.0", features = ["v4", "serde"] }
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
+uuid = { version = "1.25.0", features = ["v4"] }
+
+[build-dependencies]
+protoc-bin-vendored = "3.3.0"
+tonic-prost-build = "0.14.6"
 
 [lib]
 name ="sync"

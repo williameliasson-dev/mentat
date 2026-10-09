@@ -1,18 +1,22 @@
 use std::net::SocketAddr;
 
-use sync::Services;
-use sync::app::app;
-use sync::database::Database;
+use sync::grpc::AccountsRpc;
+use sync::pb::account::v1::accounts_server::AccountsServer;
+use sync::service::Services;
+use sync::Database;
 
 #[tokio::main]
-async fn main() {
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db = Database::connect(&database_url)
-        .await
-        .expect("failed to connect to database");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let database_url = std::env::var("DATABASE_URL")?;
+    let db = Database::connect(&database_url).await?;
     let services = Services::new(db.repositories());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app(services)).await.unwrap();
+    println!("listening on {addr}");
+
+    tonic::transport::Server::builder()
+        .add_service(AccountsServer::new(AccountsRpc::new(services)))
+        .serve(addr)
+        .await?;
+    Ok(())
 }
