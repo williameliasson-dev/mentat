@@ -1,9 +1,10 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::model::Account;
 use crate::error::{Result, SyncError};
+use crate::model::Account;
 
+#[derive(Clone)]
 pub struct AccountRepository {
     pool: PgPool,
 }

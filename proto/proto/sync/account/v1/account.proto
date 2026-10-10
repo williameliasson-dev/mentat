@@ -4,10 +4,17 @@ package sync.account.v1;
 
 import "google/protobuf/timestamp.proto";
 
-service Accounts {
+// Public surface: reachable without an account key, since this is where keys
+// come from.
+service AccountRegistry {
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
-  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
   rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+}
+
+// Authenticated surface: every rpc requires a valid account key, sent as
+// `authorization: Bearer <key>` metadata.
+service Accounts {
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
 }
 
 message CreateAccountRequest {}

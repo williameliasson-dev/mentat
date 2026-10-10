@@ -3,6 +3,7 @@ use sqlx::PgPool;
 pub mod account_repository;
 pub use account_repository::AccountRepository;
 
+#[derive(Clone)]
 pub struct Repositories {
     pub accounts: AccountRepository,
 }

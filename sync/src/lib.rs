@@ -10,6 +10,7 @@ pub use proto;
 
 pub use database::Database;
 pub use error::{Result, SyncError};
+pub use grpc::{AccountRegistryRpc, AccountsRpc, AuthLayer};
 pub use model::Account;
 pub use repository::{AccountRepository, Repositories};
 pub use service::{AccountService, Services};

@@ -3,6 +3,7 @@ use crate::repository::Repositories;
 pub mod account_service;
 pub use account_service::AccountService;
 
+#[derive(Clone)]
 pub struct Services {
     pub accounts: AccountService,
 }

@@ -1,10 +1,11 @@
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::model::Account;
 use crate::error::Result;
+use crate::model::Account;
 use crate::repository::AccountRepository;
 
+#[derive(Clone)]
 pub struct AccountService {
     repository: AccountRepository,
 }
