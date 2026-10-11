@@ -14,19 +14,19 @@ impl AccountRepository {
         Self { pool }
     }
 
-    pub async fn create(&self, account_key: &str) -> Result<Account> {
+    pub async fn create(&self, key_hash: &str) -> Result<Account> {
         Ok(sqlx::query_as::<_, Account>(
-            "INSERT INTO accounts (account_key) VALUES ($1)
-             RETURNING id, account_key, created_at",
+            "INSERT INTO accounts (key_hash) VALUES ($1)
+             RETURNING id, key_hash, created_at",
         )
-        .bind(account_key)
+        .bind(key_hash)
         .fetch_one(&self.pool)
         .await?)
     }
 
     pub async fn find_by_id(&self, id: Uuid) -> Result<Account> {
         sqlx::query_as::<_, Account>(
-            "SELECT id, account_key, created_at FROM accounts WHERE id = $1",
+            "SELECT id, key_hash, created_at FROM accounts WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -34,11 +34,11 @@ impl AccountRepository {
         .ok_or(SyncError::NotFound)
     }
 
-    pub async fn find_by_account_key(&self, account_key: &str) -> Result<Account> {
+    pub async fn find_by_key_hash(&self, key_hash: &str) -> Result<Account> {
         sqlx::query_as::<_, Account>(
-            "SELECT id, account_key, created_at FROM accounts WHERE account_key = $1",
+            "SELECT id, key_hash, created_at FROM accounts WHERE key_hash = $1",
         )
-        .bind(account_key)
+        .bind(key_hash)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(SyncError::NotFound)

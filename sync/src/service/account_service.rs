@@ -30,7 +30,7 @@ impl AccountService {
 
     pub async fn authenticate(&self, account_key: &str) -> Result<Account> {
         self.repository
-            .find_by_account_key(&hash_account_key(account_key))
+            .find_by_key_hash(&hash_account_key(account_key))
             .await
     }
 }
