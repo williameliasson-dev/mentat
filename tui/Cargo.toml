@@ -11,7 +11,9 @@ color-eyre = "0.6.5"
 crossterm = "0.29.0"
 ratatui = "0.30.2"
 minimad = "0.16.0"
-rusqlite = "0.39"
+# `bundled` compiles sqlite into the binary: no libsqlite3 on the host, so
+# CI and the released binary do not depend on one being installed.
+rusqlite = { version = "0.39", features = ["bundled"] }
 thiserror = "2.0.19"
 directories = "6.0.0"
 
