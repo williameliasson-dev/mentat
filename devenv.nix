@@ -50,8 +50,10 @@
   # Tests and ad-hoc psql default to the sync database.
   env.DATABASE_URL = "postgres://sync:sync@127.0.0.1:5432/sync";
 
+  # To stderr, so `devenv shell -- some-command` has a clean stdout and stays
+  # usable in a pipeline or a command substitution.
   enterShell = ''
-    echo "postgres: $DATABASE_URL"
-    echo "garage s3: $GARAGE_S3_ENDPOINT (bucket: vaults, admin on :$GARAGE_ADMIN_PORT)"
+    echo "postgres: $DATABASE_URL" >&2
+    echo "garage s3: $GARAGE_S3_ENDPOINT (bucket: vaults, admin on :$GARAGE_ADMIN_PORT)" >&2
   '';
 }

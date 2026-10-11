@@ -32,18 +32,25 @@ jobs:
       - name: Install devenv
         run: nix profile install nixpkgs#devenv
 
-      # The nix store caches the toolchain; these are cargo's own caches. The
-      # key includes devenv.lock because a toolchain bump invalidates `target`.
+      # Materializes .devenv/profile, which holds cargo and rustc, so the next
+      # step can expose them without a second devenv evaluation.
+      - name: Build the devenv shell
+        run: devenv shell -- true
+
+      # rust-cache derives its key by shelling out to cargo/rustc, which exist
+      # only in the devenv profile, so put that on PATH for later steps.
+      - name: Put the devenv toolchain on PATH
+        run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
+
+      # Caches compiled dependencies and crate downloads, pruning stale
+      # artifacts rather than storing the whole multi-GB `target`. Its key
+      # tracks the rustc version, so a nixpkgs bump invalidates correctly.
+      # Only master saves, so pull requests restore from it without each
+      # writing a cache into the 10GB per-repo budget.
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'devenv.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # Only postgres: `sync`'s integration test needs a database (and
       # `Database::connect` runs the migrations itself), while `tui`'s tests
