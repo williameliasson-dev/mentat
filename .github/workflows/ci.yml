@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Use devenv's binary cache
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+
+      # The nix store caches the toolchain; these are cargo's own caches. The
+      # key includes devenv.lock because a toolchain bump invalidates `target`.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'devenv.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # Only postgres: `sync`'s integration test needs a database (and
+      # `Database::connect` runs the migrations itself), while `tui`'s tests
+      # use an in-memory sqlite. Garage and the sync server stay down.
+      - name: Start postgres
+        run: devenv up -d postgres
+
+      - name: Wait for postgres
+        run: timeout 120 devenv shell -- bash -c 'until pg_isready -h 127.0.0.1 -p 5432 -q; do sleep 1; done'
+
+      - name: Test
+        run: devenv shell -- cargo test --workspace --locked
+
+      # Only reached if the tests passed, since a failed step fails the job.
+      - name: Build release binaries
+        run: devenv shell -- cargo build --workspace --release --locked
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: |
+            target/release/sync
+            target/release/tui
+          if-no-files-found: error

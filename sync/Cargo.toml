@@ -23,3 +23,6 @@ proto = { path = "../proto" }
 [lib]
 name ="sync"
 path ="src/lib.rs"
+
+[dev-dependencies]
+tokio-stream = { version = "0.1.19", features = ["net"] }
