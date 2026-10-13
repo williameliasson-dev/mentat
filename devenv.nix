@@ -8,23 +8,17 @@
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
   };
 
-  # One postgres instance with a database per server, each owned by its own
-  # role, so servers cannot read each other's tables. Adding a server means
-  # adding a database here, a process below, and its own *_DATABASE_URL.
-  services.postgres = {
-    enable = true;
-    listen_addresses = "127.0.0.1";
-    initialDatabases = [
-      { name = "sync"; user = "sync"; pass = "sync"; }
-    ];
-  };
-
-  # Garage for local S3-compatible vault blob storage. MinIO is nixpkgs
-  # `insecure` (abandoned upstream, unpatched CVEs) as of this setup, so we're
-  # on Garage instead.
-  services.garage = {
-    enable = true;
-    buckets = [ "vaults" ];
+  # Local S3 for the sync server's bucket. versitygw over a plain directory:
+  # unlike Garage (which ignores them) it enforces conditional PUTs
+  # (If-None-Match / If-Match), which account creation and vault headers rely
+  # on. A bucket is just a directory here, so creating it is a mkdir.
+  processes.s3 = {
+    exec = ''
+      mkdir -p "$S3_DATA_DIR/$S3_BUCKET"
+      exec ${pkgs.versitygw}/bin/versitygw --port 127.0.0.1:7070 \
+        --access "$S3_ACCESS_KEY_ID" --secret "$S3_SECRET_ACCESS_KEY" \
+        posix "$S3_DATA_DIR"
+    '';
   };
 
   # `devenv up` starts every server; `devenv up sync` starts only that one.
@@ -33,27 +27,28 @@
     exec = "cargo run -p sync";
 
     # Rebuild and restart on source changes. `proto` is watched too, since the
-    # generated grpc types compile from it, and `migrations` because a new one
-    # only runs on startup.
+    # generated grpc types compile from it.
     watch = {
       paths = [
         "${config.devenv.root}/sync/src"
-        "${config.devenv.root}/sync/migrations"
         "${config.devenv.root}/proto/src"
         "${config.devenv.root}/proto/proto"
       ];
-      extensions = [ "rs" "proto" "sql" ];
+      extensions = [ "rs" "proto" ];
     };
   };
 
-  env.SYNC_DATABASE_URL = "postgres://sync:sync@127.0.0.1:5432/sync";
-  # Tests and ad-hoc psql default to the sync database.
-  env.DATABASE_URL = "postgres://sync:sync@127.0.0.1:5432/sync";
+  # Dev-only credentials for the local versitygw above; never real ones.
+  env.S3_ENDPOINT = "http://127.0.0.1:7070";
+  env.S3_BUCKET = "vaults";
+  env.S3_REGION = "us-east-1";
+  env.S3_ACCESS_KEY_ID = "mentat-dev";
+  env.S3_SECRET_ACCESS_KEY = "mentat-dev-secret";
+  env.S3_DATA_DIR = "${config.devenv.state}/s3";
 
   # To stderr, so `devenv shell -- some-command` has a clean stdout and stays
   # usable in a pipeline or a command substitution.
   enterShell = ''
-    echo "postgres: $DATABASE_URL" >&2
-    echo "garage s3: $GARAGE_S3_ENDPOINT (bucket: vaults, admin on :$GARAGE_ADMIN_PORT)" >&2
+    echo "s3: $S3_ENDPOINT (bucket: $S3_BUCKET)" >&2
   '';
 }

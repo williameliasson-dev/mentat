@@ -1,46 +1,47 @@
-use sqlx::PgPool;
+use std::sync::Arc;
+
+use chrono::Utc;
+use object_store::path::Path;
+use object_store::{ObjectStore, ObjectStoreExt, PutMode};
 use uuid::Uuid;
 
-use crate::error::{Result, SyncError};
+use crate::error::Result;
 use crate::model::Account;
 
 #[derive(Clone)]
 pub struct AccountRepository {
-    pool: PgPool,
+    store: Arc<dyn ObjectStore>,
 }
 
 impl AccountRepository {
-    pub(crate) fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub(crate) fn new(store: Arc<dyn ObjectStore>) -> Self {
+        Self { store }
     }
 
     pub async fn create(&self, key_hash: &str) -> Result<Account> {
-        Ok(sqlx::query_as::<_, Account>(
-            "INSERT INTO accounts (key_hash) VALUES ($1)
-             RETURNING id, key_hash, created_at",
-        )
-        .bind(key_hash)
-        .fetch_one(&self.pool)
-        .await?)
-    }
-
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Account> {
-        sqlx::query_as::<_, Account>(
-            "SELECT id, key_hash, created_at FROM accounts WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(SyncError::NotFound)
+        let account = Account {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+        };
+        // Create, never overwrite: an existing object here means two keys
+        // hashed the same, and overwriting would hand one account to the
+        // other's key.
+        self.store
+            .put_opts(
+                &path(key_hash),
+                serde_json::to_vec(&account)?.into(),
+                PutMode::Create.into(),
+            )
+            .await?;
+        Ok(account)
     }
 
     pub async fn find_by_key_hash(&self, key_hash: &str) -> Result<Account> {
-        sqlx::query_as::<_, Account>(
-            "SELECT id, key_hash, created_at FROM accounts WHERE key_hash = $1",
-        )
-        .bind(key_hash)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(SyncError::NotFound)
+        let bytes = self.store.get(&path(key_hash)).await?.bytes().await?;
+        Ok(serde_json::from_slice(&bytes)?)
     }
+}
+
+fn path(key_hash: &str) -> Path {
+    Path::from_iter(["accounts", &format!("{key_hash}.json")])
 }

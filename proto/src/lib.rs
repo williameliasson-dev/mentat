@@ -11,6 +11,11 @@ pub mod pb {
             tonic::include_proto!("sync.account.v1");
         }
     }
+    pub mod vault {
+        pub mod v1 {
+            tonic::include_proto!("sync.vault.v1");
+        }
+    }
 }
 
 pub use prost_types;

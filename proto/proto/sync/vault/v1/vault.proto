@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package sync.vault.v1;
+
+// Authenticated surface: every rpc requires a valid account key, sent as
+// `authorization: Bearer <key>` metadata, and only ever reaches the caller's
+// own vaults. A vault id belonging to another account answers NOT_FOUND, the
+// same as one that does not exist.
+//
+// The server stores whatever bytes it is given and never reads them; clients
+// encrypt before sending. Every id is a client-generated UUID.
+//
+// A vault is laid out as:
+//   header          one small document, replaced with compare-and-swap
+//   log/<device>/   each device's append-only batches of updates, numbered
+//                   1, 2, 3, ... by the server
+//   snapshots/      compacted document state, one object per snapshot
+service Vaults {
+  rpc ListVaults(ListVaultsRequest) returns (ListVaultsResponse);
+
+  rpc GetHeader(GetHeaderRequest) returns (GetHeaderResponse);
+  // ABORTED if `if_match` does not name the current header.
+  rpc PutHeader(PutHeaderRequest) returns (PutHeaderResponse);
+
+  rpc Push(PushRequest) returns (PushResponse);
+  rpc Pull(PullRequest) returns (stream PullResponse);
+  // Deletes a device's log up to a sequence number, once a snapshot covers it.
+  rpc Prune(PruneRequest) returns (PruneResponse);
+
+  rpc PutSnapshot(PutSnapshotRequest) returns (PutSnapshotResponse);
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
+  rpc DeleteSnapshot(DeleteSnapshotRequest) returns (DeleteSnapshotResponse);
+}
+
+// Every vault with at least one object stored in it.
+message ListVaultsRequest {}
+
+message ListVaultsResponse {
+  repeated string vault_ids = 1;
+}
+
+message GetHeaderRequest {
+  string vault_id = 1;
+}
+
+message GetHeaderResponse {
+  bytes header = 1;
+  // Pass back as `if_match` to replace this exact version.
+  string etag = 2;
+}
+
+message PutHeaderRequest {
+  string vault_id = 1;
+  bytes header = 2;
+  // Absent: create the header, failing if one already exists.
+  // Present: replace the header only if it is still this version.
+  optional string if_match = 3;
+}
+
+message PutHeaderResponse {
+  string etag = 1;
+}
+
+message PushRequest {
+  string vault_id = 1;
+  string device_id = 2;
+  bytes batch = 3;
+}
+
+message PushResponse {
+  // Where the batch landed in this device's log.
+  uint64 seq = 1;
+}
+
+message PullRequest {
+  string vault_id = 1;
+  // Per device id, the last seq already seen. Devices left out are read from
+  // the start of their log.
+  map<string, uint64> after = 2;
+}
+
+// One batch per message, in seq order within each device.
+message PullResponse {
+  string device_id = 1;
+  uint64 seq = 2;
+  bytes batch = 3;
+}
+
+message PruneRequest {
+  string vault_id = 1;
+  string device_id = 2;
+  // Deletes every batch with seq <= up_to, except the device's newest batch,
+  // which is always kept so the next push can continue its numbering.
+  uint64 up_to = 3;
+}
+
+message PruneResponse {}
+
+message PutSnapshotRequest {
+  string vault_id = 1;
+  string doc_id = 2;
+  string snapshot_id = 3;
+  bytes snapshot = 4;
+}
+
+message PutSnapshotResponse {}
+
+message GetSnapshotRequest {
+  string vault_id = 1;
+  string doc_id = 2;
+  string snapshot_id = 3;
+}
+
+message GetSnapshotResponse {
+  bytes snapshot = 1;
+}
+
+message DeleteSnapshotRequest {
+  string vault_id = 1;
+  string doc_id = 2;
+  string snapshot_id = 3;
+}
+
+message DeleteSnapshotResponse {}

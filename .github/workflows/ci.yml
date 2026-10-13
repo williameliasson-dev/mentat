@@ -52,14 +52,14 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      # Only postgres: `sync`'s integration test needs a database (and
-      # `Database::connect` runs the migrations itself), while `tui`'s tests
-      # use an in-memory sqlite. Garage and the sync server stay down.
-      - name: Start postgres
-        run: devenv up -d postgres
+      # Only the bucket: `sync`'s integration tests need a real S3 (the
+      # conditional writes they check are the bucket's), while `tui`'s tests
+      # use an in-memory sqlite. The sync server itself stays down.
+      - name: Start s3
+        run: devenv up -d s3
 
-      - name: Wait for postgres
-        run: timeout 120 devenv shell -- bash -c 'until pg_isready -h 127.0.0.1 -p 5432 -q; do sleep 1; done'
+      - name: Wait for s3
+        run: timeout 120 devenv shell -- bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
 
       - name: Test
         run: devenv shell -- cargo test --workspace --locked
