@@ -6,6 +6,9 @@ pub enum SyncError {
     #[error("not found")]
     NotFound,
 
+    #[error("an auth token is 64 lowercase hex characters")]
+    InvalidAuthToken,
+
     /// A conditional write lost: the object already existed, or changed since
     /// the caller last read it.
     #[error("conflict")]
@@ -36,6 +39,7 @@ impl From<SyncError> for Status {
     fn from(error: SyncError) -> Self {
         match &error {
             SyncError::NotFound => Status::not_found(error.to_string()),
+            SyncError::InvalidAuthToken => Status::invalid_argument(error.to_string()),
             SyncError::Conflict => Status::aborted(error.to_string()),
             SyncError::Storage(_) | SyncError::Encoding(_) => Status::internal("internal error"),
         }

@@ -3,6 +3,7 @@ members = [
     "tui",
     "sync",
     "proto",
+    "crypto",
 ]
 resolver = "3"
 

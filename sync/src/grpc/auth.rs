@@ -12,10 +12,10 @@ use crate::service::AccountService;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
-/// Rejects requests that do not carry a valid account key, and hands the
+/// Rejects requests that do not carry a registered auth token, and hands the
 /// resolved [`Account`] to the handler through request extensions.
 ///
-/// Mount it per service, so that which rpcs require a key is answered by where
+/// Mount it per service, so that which rpcs require a token is answered by where
 /// they are registered rather than by matching on request paths:
 ///
 /// ```ignore
@@ -75,19 +75,19 @@ where
         let accounts = self.accounts.clone();
 
         Box::pin(async move {
-            let Some(key) = account_key(request.headers()) else {
-                return Ok(Status::unauthenticated("missing account key").into_http());
+            let Some(token) = auth_token(request.headers()) else {
+                return Ok(Status::unauthenticated("missing auth token").into_http());
             };
 
-            match accounts.authenticate(&key).await {
+            match accounts.authenticate(&token).await {
                 Ok(account) => {
                     request.extensions_mut().insert(account);
                     inner.call(request).await
                 }
                 Err(SyncError::NotFound) => {
-                    Ok(Status::unauthenticated("invalid account key").into_http())
+                    Ok(Status::unauthenticated("invalid auth token").into_http())
                 }
-                // A database outage is not a bad key; report it as itself.
+                // A storage outage is not a bad token; report it as itself.
                 Err(error) => Ok(Status::from(error).into_http()),
             }
         })
@@ -106,7 +106,7 @@ pub fn authenticated_account<T>(request: &Request<T>) -> std::result::Result<Acc
         .ok_or_else(|| Status::internal("authenticated rpc mounted without AuthLayer"))
 }
 
-fn account_key(headers: &http::HeaderMap) -> Option<String> {
+fn auth_token(headers: &http::HeaderMap) -> Option<String> {
     headers
         .get(http::header::AUTHORIZATION)?
         .to_str()
@@ -126,7 +126,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::account_key;
+    use super::auth_token;
 
     fn headers(value: &str) -> http::HeaderMap {
         let mut headers = http::HeaderMap::new();
@@ -135,25 +135,25 @@ mod tests {
     }
 
     #[test]
-    fn reads_a_bearer_key() {
+    fn reads_a_bearer_token() {
         assert_eq!(
-            account_key(&headers("Bearer abc123")).as_deref(),
+            auth_token(&headers("Bearer abc123")).as_deref(),
             Some("abc123")
         );
     }
 
     #[test]
     fn rejects_a_missing_header() {
-        assert_eq!(account_key(&http::HeaderMap::new()), None);
+        assert_eq!(auth_token(&http::HeaderMap::new()), None);
     }
 
     #[test]
-    fn rejects_an_unprefixed_key() {
-        assert_eq!(account_key(&headers("abc123")), None);
+    fn rejects_an_unprefixed_token() {
+        assert_eq!(auth_token(&headers("abc123")), None);
     }
 
     #[test]
     fn rejects_another_scheme() {
-        assert_eq!(account_key(&headers("Basic abc123")), None);
+        assert_eq!(auth_token(&headers("Basic abc123")), None);
     }
 }

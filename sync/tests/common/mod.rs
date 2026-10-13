@@ -4,6 +4,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crypto::AccountKey;
 use futures::TryStreamExt;
 use object_store::{ObjectStore, ObjectStoreExt};
 use proto::pb::account::v1::CreateAccountRequest;
@@ -52,16 +53,20 @@ impl Server {
         }
     }
 
-    /// Mints an account and returns its id and key.
+    /// Registers a fresh account the way a client does, and returns its id
+    /// and auth token.
     pub async fn create_account(&self) -> (String, String) {
+        let auth_token = AccountKey::generate().auth_token();
         let created = AccountRegistryClient::connect(self.url.clone())
             .await
             .unwrap()
-            .create_account(CreateAccountRequest {})
+            .create_account(CreateAccountRequest {
+                auth_token: auth_token.clone(),
+            })
             .await
             .expect("create_account is public")
             .into_inner();
-        (created.account.expect("account").id, created.account_key)
+        (created.account.expect("account").id, auth_token)
     }
 
     /// Deletes everything this test wrote, which is everything under its

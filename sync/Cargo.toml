@@ -29,4 +29,5 @@ name ="sync"
 path ="src/lib.rs"
 
 [dev-dependencies]
+crypto = { path = "../crypto" }
 tokio-stream = { version = "0.1.19", features = ["net"] }

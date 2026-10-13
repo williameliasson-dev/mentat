@@ -13,8 +13,8 @@ use proto::pb::account::v1::{
     CreateAccountResponse, GetAccountRequest, GetAccountResponse,
 };
 
-/// The public account rpcs: minting an account, and trading a key for the
-/// account it belongs to.
+/// The public account rpcs: registering an auth token as an account, and
+/// trading a token for the account it belongs to.
 pub struct AccountRegistryRpc {
     accounts: AccountService,
 }
@@ -29,12 +29,12 @@ impl AccountRegistryRpc {
 impl AccountRegistry for AccountRegistryRpc {
     async fn create_account(
         &self,
-        _request: Request<CreateAccountRequest>,
+        request: Request<CreateAccountRequest>,
     ) -> Result<Response<CreateAccountResponse>, Status> {
-        let (account, account_key) = self.accounts.register().await?;
+        let auth_token = request.into_inner().auth_token;
+        let account = self.accounts.register(&auth_token).await?;
         Ok(Response::new(CreateAccountResponse {
             account: Some(pb_account(account)),
-            account_key,
         }))
     }
 
@@ -42,15 +42,15 @@ impl AccountRegistry for AccountRegistryRpc {
         &self,
         request: Request<AuthenticateRequest>,
     ) -> Result<Response<AuthenticateResponse>, Status> {
-        let account_key = request.into_inner().account_key;
-        let account = self.accounts.authenticate(&account_key).await?;
+        let auth_token = request.into_inner().auth_token;
+        let account = self.accounts.authenticate(&auth_token).await?;
         Ok(Response::new(AuthenticateResponse {
             account: Some(pb_account(account)),
         }))
     }
 }
 
-/// The account rpcs that require a key. Mounted behind
+/// The account rpcs that require an auth token. Mounted behind
 /// [`AuthLayer`](crate::grpc::AuthLayer), which has already resolved the
 /// caller by the time these run — so this holds no service of its own.
 #[derive(Default)]

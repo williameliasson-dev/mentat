@@ -4,25 +4,34 @@ package sync.account.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// Public surface: reachable without an account key, since this is where keys
-// come from.
+// Public surface: reachable without an auth token, since this is where
+// tokens get registered.
+//
+// The server never sees the account key itself. Clients generate it, derive
+// an auth token from it (see the `crypto` crate), and only ever send that.
 service AccountRegistry {
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
   rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
 }
 
-// Authenticated surface: every rpc requires a valid account key, sent as
-// `authorization: Bearer <key>` metadata.
+// Authenticated surface: every rpc requires a registered auth token, sent as
+// `authorization: Bearer <token>` metadata.
 service Accounts {
   rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
 }
 
-message CreateAccountRequest {}
+message CreateAccountRequest {
+  // 64 hex characters, derived on the client. Registering a token that is
+  // already registered returns its existing account, so a client can safely
+  // retry.
+  string auth_token = 1;
+}
 
 message CreateAccountResponse {
   Account account = 1;
-  // Plaintext account key. Only ever returned here, once, at creation.
-  string account_key = 2;
+  // Was the server-generated account key, back when the server made keys.
+  reserved 2;
+  reserved "account_key";
 }
 
 message GetAccountRequest {
@@ -34,7 +43,7 @@ message GetAccountResponse {
 }
 
 message AuthenticateRequest {
-  string account_key = 1;
+  string auth_token = 1;
 }
 
 message AuthenticateResponse {
