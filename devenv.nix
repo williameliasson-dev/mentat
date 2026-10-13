@@ -46,6 +46,10 @@
   env.S3_SECRET_ACCESS_KEY = "mentat-dev-secret";
   env.S3_DATA_DIR = "${config.devenv.state}/s3";
 
+  # Points the tui at the `sync` process above. Unset outside devenv, the tui
+  # runs offline.
+  env.MENTAT_SYNC_URL = "http://127.0.0.1:3000";
+
   # To stderr, so `devenv shell -- some-command` has a clean stdout and stays
   # usable in a pipeline or a command substitution.
   enterShell = ''

@@ -4122,12 +4122,23 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "crossterm",
+ "crypto",
  "directories",
+ "futures",
+ "hex",
  "loro",
  "minimad",
+ "object_store",
  "proto",
  "ratatui",
+ "serde",
+ "serde_json",
+ "sync",
  "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tower",
  "uuid",
 ]
 

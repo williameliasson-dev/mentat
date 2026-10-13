@@ -7,20 +7,26 @@
 //!                as a node carrying its id, kind, name and timestamps
 //! notes/<id>/    one document per note, holding only its body, opened the
 //!                first time the note is read
+//! unsynced       the documents changed since the last sync, one per line
+//! sync.json      what sync remembers; see `crate::remote`
 //! ```
 //!
-//! Loro documents merge with copies edited elsewhere, which is what sync will
-//! build on; nothing here syncs yet.
+//! Loro documents merge with copies edited elsewhere, which is what sync
+//! builds on.
 
 mod doc_file;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::fs;
+use std::collections::{BTreeSet, HashMap};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use loro::{LoroMap, LoroText, LoroTree, LoroValue, TreeID, TreeParentId, ValueOrContainer};
+use loro::{
+    ExportMode, LoroMap, LoroText, LoroTree, LoroValue, TreeID, TreeParentId, ValueOrContainer,
+    VersionVector,
+};
 use uuid::Uuid;
 
 use crate::{CoreError, Repositories, Result};
@@ -59,6 +65,33 @@ impl Store {
     pub fn repositories(&self) -> Repositories {
         Repositories::new(self.vault.clone())
     }
+
+    pub(crate) fn vault(&self) -> &Vault {
+        &self.vault
+    }
+}
+
+/// One of a vault's documents, as sync names them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum DocRef {
+    Tree,
+    Note(Uuid),
+}
+
+impl DocRef {
+    pub fn key(self) -> String {
+        match self {
+            DocRef::Tree => "tree".to_string(),
+            DocRef::Note(id) => id.to_string(),
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "tree" => Some(DocRef::Tree),
+            id => id.parse().ok().map(DocRef::Note),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,16 +129,22 @@ pub(crate) struct Vault {
     nodes: RefCell<HashMap<Uuid, TreeID>>,
     /// Note documents opened so far.
     notes: RefCell<HashMap<Uuid, DocFile>>,
+    /// Documents with local changes not yet pushed, kept in `unsynced` (one
+    /// key per line) so a crash before the next sync doesn't lose track.
+    unsynced: RefCell<BTreeSet<DocRef>>,
     /// The last timestamp handed out; see [`Vault::now_ms`].
     clock: Cell<i64>,
 }
 
 impl Vault {
     fn open(dir: PathBuf) -> Result<Self> {
-        Ok(Self::new(
-            Some(dir.clone()),
-            DocFile::open(dir.join("tree"))?,
-        ))
+        let vault = Self::new(Some(dir.clone()), DocFile::open(dir.join("tree"))?);
+        if let Ok(unsynced) = fs::read_to_string(dir.join(UNSYNCED)) {
+            vault
+                .unsynced
+                .replace(unsynced.lines().filter_map(DocRef::from_key).collect());
+        }
+        Ok(vault)
     }
 
     fn in_memory() -> Self {
@@ -118,17 +157,28 @@ impl Vault {
             tree: RefCell::new(tree),
             nodes: RefCell::default(),
             notes: RefCell::default(),
+            unsynced: RefCell::default(),
             clock: Cell::new(0),
         };
-        let nodes = vault
+        vault.reindex();
+        vault
+    }
+
+    pub fn dir(&self) -> Option<&Path> {
+        self.dir.as_deref()
+    }
+
+    /// Rebuilds the id lookup from the tree, which an import may have added
+    /// to or deleted from.
+    fn reindex(&self) {
+        let nodes = self
             .tree()
             .nodes()
             .into_iter()
-            .filter(|&node| !vault.tree().is_node_deleted(&node).unwrap_or(true))
-            .filter_map(|node| Some((vault.uuid_of(node)?, node)))
+            .filter(|&node| !self.tree().is_node_deleted(&node).unwrap_or(true))
+            .filter_map(|node| Some((self.uuid_of(node)?, node)))
             .collect();
-        vault.nodes.replace(nodes);
-        vault
+        self.nodes.replace(nodes);
     }
 
     fn tree(&self) -> LoroTree {
@@ -234,12 +284,96 @@ impl Vault {
     }
 
     pub fn save_tree(&self) -> Result<()> {
-        self.tree.borrow_mut().save()
+        if self.tree.borrow_mut().save()? {
+            self.mark_unsynced(DocRef::Tree)?;
+        }
+        Ok(())
     }
 
     /// The body of note `id`, opening its document if this is the first read.
     pub fn body(&self, id: Uuid) -> Result<LoroText> {
         self.tree_id(Kind::Note, id)?;
+        self.note_file(id, |file| Ok(file.doc.get_text("body")))
+    }
+
+    pub fn save_body(&self, id: Uuid) -> Result<()> {
+        let saved = match self.notes.borrow_mut().get_mut(&id) {
+            Some(file) => file.save()?,
+            None => false,
+        };
+        if saved {
+            self.mark_unsynced(DocRef::Note(id))?;
+        }
+        Ok(())
+    }
+
+    /// Documents changed locally since the last [`Vault::clear_unsynced`].
+    pub fn unsynced(&self) -> Vec<DocRef> {
+        self.unsynced.borrow().iter().copied().collect()
+    }
+
+    pub fn clear_unsynced(&self) -> Result<()> {
+        self.unsynced.borrow_mut().clear();
+        if let Some(dir) = &self.dir {
+            fs::write(dir.join(UNSYNCED), "")?;
+        }
+        Ok(())
+    }
+
+    /// Everything in `doc` past `since`, or `None` for a note that has since
+    /// been deleted, whose changes no longer matter.
+    pub fn export(&self, doc: DocRef, since: &VersionVector) -> Result<Option<Vec<u8>>> {
+        let export = |file: &DocFile| file.doc.export(ExportMode::updates(since));
+        match doc {
+            DocRef::Tree => Ok(Some(export(&self.tree.borrow())?)),
+            DocRef::Note(id) if self.tree_id(Kind::Note, id).is_ok() => {
+                self.body(id)?;
+                Ok(Some(export(&self.notes.borrow()[&id])?))
+            }
+            DocRef::Note(_) => Ok(None),
+        }
+    }
+
+    /// Merges changes made elsewhere into `doc`. They came from the server,
+    /// so unlike a local save they are not marked unsynced.
+    pub fn import(&self, doc: DocRef, update: &[u8]) -> Result<()> {
+        match doc {
+            DocRef::Tree => {
+                self.tree.borrow_mut().import(update)?;
+                self.reindex();
+            }
+            // Imported even when the tree has no such note (yet, or anymore):
+            // an orphaned body is harmless, a lost one is not.
+            DocRef::Note(id) => self.note_file(id, |file| file.import(update))?,
+        }
+        Ok(())
+    }
+
+    /// `doc`'s current version.
+    pub fn version(&self, doc: DocRef) -> Result<VersionVector> {
+        match doc {
+            DocRef::Tree => Ok(self.tree.borrow().doc.oplog_vv()),
+            DocRef::Note(id) => self.note_file(id, |file| Ok(file.doc.oplog_vv())),
+        }
+    }
+
+    fn mark_unsynced(&self, doc: DocRef) -> Result<()> {
+        if self.unsynced.borrow_mut().insert(doc)
+            && let Some(dir) = &self.dir
+        {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join(UNSYNCED))?;
+            writeln!(file, "{}", doc.key())?;
+            file.sync_data()?;
+        }
+        Ok(())
+    }
+
+    /// Runs `f` on note `id`'s document, opening it if need be, whether or
+    /// not the tree has the note.
+    fn note_file<T>(&self, id: Uuid, f: impl FnOnce(&mut DocFile) -> Result<T>) -> Result<T> {
         let mut notes = self.notes.borrow_mut();
         let file = match notes.entry(id) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
@@ -248,14 +382,7 @@ impl Vault {
                 None => DocFile::in_memory(),
             }),
         };
-        Ok(file.doc.get_text("body"))
-    }
-
-    pub fn save_body(&self, id: Uuid) -> Result<()> {
-        match self.notes.borrow_mut().get_mut(&id) {
-            Some(file) => file.save(),
-            None => Ok(()),
-        }
+        f(file)
     }
 
     /// Strictly increasing milliseconds, so two edits in the same millisecond
@@ -332,6 +459,8 @@ impl Vault {
         ids
     }
 }
+
+const UNSYNCED: &str = "unsynced";
 
 fn string(meta: &LoroMap, key: &str) -> String {
     match meta.get(key) {

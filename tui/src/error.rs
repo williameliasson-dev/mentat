@@ -23,6 +23,21 @@ pub enum CoreError {
 
     #[error("document encoding error: {0}")]
     Encode(#[from] loro::LoroEncodeError),
+
+    #[error("sync: {0}")]
+    Sync(String),
+
+    #[error("sync server: {}", .0.message())]
+    Remote(#[from] tonic::Status),
+
+    #[error("could not reach the sync server: {0}")]
+    Connect(#[from] tonic::transport::Error),
+
+    #[error("sync: {0}")]
+    Crypto(#[from] crypto::CryptoError),
+
+    #[error("sync state: {0}")]
+    State(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, CoreError>;

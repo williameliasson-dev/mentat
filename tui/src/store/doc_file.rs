@@ -72,11 +72,12 @@ impl DocFile {
         })
     }
 
-    /// Commits pending changes and appends them to the log.
-    pub fn save(&mut self) -> Result<()> {
+    /// Commits pending changes and appends them to the log. Returns whether
+    /// there was anything to save.
+    pub fn save(&mut self) -> Result<bool> {
         self.doc.commit();
         if self.doc.oplog_vv() == self.saved {
-            return Ok(());
+            return Ok(false);
         }
         if let Some(dir) = &self.dir {
             let update = self.doc.export(ExportMode::updates(&self.saved))?;
@@ -94,7 +95,13 @@ impl DocFile {
         if self.log_entries >= COMPACT_AFTER {
             self.compact()?;
         }
-        Ok(())
+        Ok(true)
+    }
+
+    /// Merges in changes made elsewhere, and saves them.
+    pub fn import(&mut self, update: &[u8]) -> Result<()> {
+        self.doc.import(update)?;
+        self.save().map(drop)
     }
 
     /// Deletes the document from disk.

@@ -16,8 +16,22 @@ directories = "6.0.0"
 
 proto = { path = "../proto" }
 loro = "1.16.2"
-uuid = { version = "1.28.0", features = ["v4"] }
+uuid = { version = "1.28.0", features = ["serde", "v4"] }
+crypto = { path = "../crypto" }
+tonic = "0.14.6"
+serde_json = "1.0.154"
+serde = { version = "1.0.229", features = ["derive"] }
+tokio = { version = "1.53.2", features = ["rt", "net", "time"] }
+hex = "0.4.3"
 
 [lib]
 name ="tui"
 path ="src/lib.rs"
+
+[dev-dependencies]
+futures = "0.3.34"
+object_store = "0.14.2"
+sync = { path = "../sync" }
+tokio = { version = "1.53.2", features = ["rt", "net", "macros"] }
+tokio-stream = { version = "0.1.19", features = ["net"] }
+tower = "0.5.3"
