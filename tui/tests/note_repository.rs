@@ -1,14 +1,14 @@
-use tui::{CoreError, Database, NoteRepository};
+use tui::{CoreError, NoteRepository, Store};
+use uuid::Uuid;
 
 fn repo() -> NoteRepository {
-    Database::in_memory().unwrap().repositories().notes
+    Store::in_memory().unwrap().repositories().notes
 }
 
 #[test]
 fn create_and_get() {
     let repo = repo();
     let note = repo.create(None, "Hello", "World").unwrap();
-    assert!(note.id > 0);
 
     let fetched = repo.get(note.id).unwrap();
     assert_eq!(fetched, note);
@@ -17,7 +17,8 @@ fn create_and_get() {
 #[test]
 fn get_missing_returns_not_found() {
     let repo = repo();
-    assert!(matches!(repo.get(42), Err(CoreError::NotFound(42))));
+    let missing = Uuid::new_v4();
+    assert!(matches!(repo.get(missing), Err(CoreError::NotFound(id)) if id == missing));
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn list_orders_by_updated_desc() {
     // Touch A so it becomes most recently updated.
     let a = repo.update(a.id, "A2", "").unwrap();
 
-    let ids: Vec<i64> = repo.list(None).unwrap().iter().map(|n| n.id).collect();
+    let ids: Vec<Uuid> = repo.list(None).unwrap().iter().map(|n| n.id).collect();
     assert_eq!(ids, vec![a.id, b.id]);
 }
 
@@ -47,9 +48,10 @@ fn update_changes_fields_and_timestamp() {
 #[test]
 fn update_missing_returns_not_found() {
     let repo = repo();
+    let missing = Uuid::new_v4();
     assert!(matches!(
-        repo.update(42, "x", "y"),
-        Err(CoreError::NotFound(42))
+        repo.update(missing, "x", "y"),
+        Err(CoreError::NotFound(id)) if id == missing
     ));
 }
 
@@ -64,5 +66,6 @@ fn delete_removes_note() {
 #[test]
 fn delete_missing_returns_not_found() {
     let repo = repo();
-    assert!(matches!(repo.delete(42), Err(CoreError::NotFound(42))));
+    let missing = Uuid::new_v4();
+    assert!(matches!(repo.delete(missing), Err(CoreError::NotFound(id)) if id == missing));
 }

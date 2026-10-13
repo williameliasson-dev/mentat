@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::{CoreError, Folder, FolderRepository, Result};
 
 pub struct FolderService {
@@ -9,15 +11,15 @@ impl FolderService {
         Self { repository }
     }
 
-    pub fn create_folder(&self, parent_id: Option<i64>, name: &str) -> Result<Folder> {
+    pub fn create_folder(&self, parent_id: Option<Uuid>, name: &str) -> Result<Folder> {
         self.repository.create(parent_id, name)
     }
 
-    pub fn get_folder(&self, id: i64) -> Result<Folder> {
+    pub fn get_folder(&self, id: Uuid) -> Result<Folder> {
         self.repository.get(id)
     }
 
-    pub fn list_folders(&self, parent_id: Option<i64>) -> Result<Vec<Folder>> {
+    pub fn list_folders(&self, parent_id: Option<Uuid>) -> Result<Vec<Folder>> {
         self.repository.list(parent_id)
     }
 
@@ -26,7 +28,7 @@ impl FolderService {
     /// Refuses a move into the folder's own subtree, which would strand it,
     /// and a move onto a name a sibling already holds — the schema's
     /// `UNIQUE (parent_id, name)` would reject that as an opaque SQL error.
-    pub fn move_folder(&self, id: i64, parent_id: Option<i64>) -> Result<Folder> {
+    pub fn move_folder(&self, id: Uuid, parent_id: Option<Uuid>) -> Result<Folder> {
         if let Some(parent) = parent_id
             && self.repository.is_descendant_of(parent, id)?
         {
@@ -45,14 +47,14 @@ impl FolderService {
     }
 
     /// Whether `id` is `ancestor` or lives inside it.
-    pub fn is_descendant_of(&self, id: i64, ancestor: i64) -> Result<bool> {
+    pub fn is_descendant_of(&self, id: Uuid, ancestor: Uuid) -> Result<bool> {
         self.repository.is_descendant_of(id, ancestor)
     }
 
     /// Renames a folder, refusing a name a sibling already holds — the
     /// schema's `UNIQUE (parent_id, name)` would otherwise surface as an
     /// opaque SQL error.
-    pub fn rename_folder(&self, id: i64, name: &str) -> Result<Folder> {
+    pub fn rename_folder(&self, id: Uuid, name: &str) -> Result<Folder> {
         let parent_id = self.repository.get(id)?.parent_id;
         if self
             .repository
@@ -66,7 +68,7 @@ impl FolderService {
     }
 
     /// Deletes the folder along with everything inside it.
-    pub fn delete_folder(&self, id: i64) -> Result<()> {
+    pub fn delete_folder(&self, id: Uuid) -> Result<()> {
         self.repository.delete(id)
     }
 }

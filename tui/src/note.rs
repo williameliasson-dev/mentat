@@ -1,8 +1,10 @@
+use uuid::Uuid;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
-    pub id: i64,
+    pub id: Uuid,
     /// Containing folder; `None` at the root.
-    pub folder_id: Option<i64>,
+    pub folder_id: Option<Uuid>,
     pub title: String,
     pub body: String,
     /// Unix timestamp (seconds)

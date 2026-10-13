@@ -1,7 +1,8 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::DefaultTerminal;
-use tui::Database;
+use tui::Store;
 use tui::{Action, Services, View, views::HomeView};
+use uuid::Uuid;
 
 mod editor;
 
@@ -11,12 +12,12 @@ struct App {
 }
 
 impl App {
-    /// Opens the database and builds the initial view. Runs before the TUI is
+    /// Opens the vault and builds the initial view. Runs before the TUI is
     /// initialised, so a failure reports to a normal terminal.
     pub fn new() -> color_eyre::Result<Self> {
-        let database = Database::new()?;
+        let store = Store::new()?;
         Ok(App {
-            services: Services::new(database.repositories()),
+            services: Services::new(store.repositories()),
             view: Box::new(HomeView::new()),
         })
     }
@@ -50,7 +51,7 @@ impl App {
     fn edit_in_external_editor(
         &mut self,
         terminal: &mut DefaultTerminal,
-        id: i64,
+        id: Uuid,
     ) -> color_eyre::Result<()> {
         let Some(body) = self.view.note_body(id) else {
             return Ok(());

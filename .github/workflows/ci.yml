@@ -54,7 +54,7 @@ jobs:
 
       # Only the bucket: `sync`'s integration tests need a real S3 (the
       # conditional writes they check are the bucket's), while `tui`'s tests
-      # use an in-memory sqlite. The sync server itself stays down.
+      # use in-memory and temp-dir vaults. The sync server itself stays down.
       - name: Start s3
         run: devenv up -d s3
 

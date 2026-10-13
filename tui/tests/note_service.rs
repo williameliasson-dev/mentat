@@ -1,7 +1,7 @@
-use tui::{Database, NoteService};
+use tui::{NoteService, Store};
 
 fn service() -> NoteService {
-    NoteService::new(Database::in_memory().unwrap().repositories().notes)
+    NoteService::new(Store::in_memory().unwrap().repositories().notes)
 }
 
 #[test]

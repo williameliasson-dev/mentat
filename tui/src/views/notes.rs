@@ -7,6 +7,8 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
+use uuid::Uuid;
+
 use crate::{Action, Folder, Note, Services, View, consts::colors, service::transfer};
 
 const TITLE_MAX: usize = 60;
@@ -37,8 +39,8 @@ impl Mode {
 /// come from different tables and overlap, so the kind has to travel with it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EntryId {
-    Folder(i64),
-    Note(i64),
+    Folder(Uuid),
+    Note(Uuid),
 }
 
 /// What `p` will do with the clipboard.
@@ -156,7 +158,7 @@ impl NotesView {
     }
 
     /// Id of the folder currently open; `None` at the root.
-    fn folder_id(&self) -> Option<i64> {
+    fn folder_id(&self) -> Option<Uuid> {
         self.path.last().map(|f| f.id)
     }
 
@@ -171,7 +173,7 @@ impl NotesView {
         s
     }
 
-    fn children_of(services: &Services, folder_id: Option<i64>) -> Vec<Entry> {
+    fn children_of(services: &Services, folder_id: Option<Uuid>) -> Vec<Entry> {
         let folders = services.folders.list_folders(folder_id).unwrap_or_default();
         let notes = services.notes.list_notes(folder_id).unwrap_or_default();
         folders
@@ -904,14 +906,14 @@ impl View for NotesView {
         Some(Position::new(inner.x + column, inner.y))
     }
 
-    fn note_body(&self, id: i64) -> Option<String> {
+    fn note_body(&self, id: Uuid) -> Option<String> {
         self.entries.iter().find_map(|e| match e {
             Entry::Note(n) if n.id == id => Some(n.body.clone()),
             _ => None,
         })
     }
 
-    fn set_note_body(&mut self, services: &Services, id: i64, body: &str) {
+    fn set_note_body(&mut self, services: &Services, id: Uuid, body: &str) {
         let title = self.entries.iter().find_map(|e| match e {
             Entry::Note(n) if n.id == id => Some(n.title.clone()),
             _ => None,

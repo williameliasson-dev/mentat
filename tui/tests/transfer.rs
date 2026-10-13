@@ -1,7 +1,7 @@
-use tui::{CoreError, Database, Services, service::transfer};
+use tui::{CoreError, Services, Store, service::transfer};
 
 fn services() -> Services {
-    Services::new(Database::in_memory().unwrap().repositories())
+    Services::new(Store::in_memory().unwrap().repositories())
 }
 
 // -- Moving ------------------------------------------------------------------

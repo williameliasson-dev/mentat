@@ -2,10 +2,11 @@
 //! covered rather than just the services underneath them.
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use tui::{Database, Services, View, views::NotesView};
+use tui::{Services, Store, View, views::NotesView};
+use uuid::Uuid;
 
 fn services() -> Services {
-    Services::new(Database::in_memory().unwrap().repositories())
+    Services::new(Store::in_memory().unwrap().repositories())
 }
 
 fn press(view: &mut NotesView, services: &Services, code: KeyCode) {
@@ -19,7 +20,7 @@ fn press_ctrl(view: &mut NotesView, services: &Services, c: char) {
     );
 }
 
-fn titles_in(services: &Services, folder: Option<i64>) -> Vec<String> {
+fn titles_in(services: &Services, folder: Option<Uuid>) -> Vec<String> {
     services
         .notes
         .list_notes(folder)

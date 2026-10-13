@@ -1,14 +1,13 @@
-use tui::{CoreError, Database, Repositories};
+use tui::{CoreError, Repositories, Store};
 
 fn repos() -> Repositories {
-    Database::in_memory().unwrap().repositories()
+    Store::in_memory().unwrap().repositories()
 }
 
 #[test]
 fn create_and_get() {
     let r = repos();
     let folder = r.folders.create(None, "work").unwrap();
-    assert!(folder.id > 0);
     assert_eq!(folder.parent_id, None);
     assert_eq!(r.folders.get(folder.id).unwrap(), folder);
 }
@@ -78,7 +77,6 @@ fn deleting_folder_cascades_to_notes_and_subfolders() {
 
     r.folders.delete(work.id).unwrap();
 
-    // Requires `PRAGMA foreign_keys = ON`; without it these all survive.
     assert!(matches!(r.folders.get(sub.id), Err(CoreError::NotFound(_))));
     assert!(matches!(r.notes.get(note.id), Err(CoreError::NotFound(_))));
     assert!(matches!(r.notes.get(deep.id), Err(CoreError::NotFound(_))));

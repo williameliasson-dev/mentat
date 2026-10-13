@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use rusqlite::Connection;
+use crate::store::Vault;
 
 pub mod folder_repository;
 pub mod note_repository;
 pub use folder_repository::FolderRepository;
 pub use note_repository::NoteRepository;
 
-/// Every repository, all sharing one connection.
+/// Every repository, all sharing one vault.
 ///
-/// Built by `Database::repositories`. Adding a repository means adding a field
+/// Built by `Store::repositories`. Adding a repository means adding a field
 /// here and a line in `new` — nothing above this layer changes.
 pub struct Repositories {
     pub notes: NoteRepository,
@@ -17,10 +17,10 @@ pub struct Repositories {
 }
 
 impl Repositories {
-    pub(crate) fn new(connection: Rc<Connection>) -> Self {
+    pub(crate) fn new(vault: Rc<Vault>) -> Self {
         Self {
-            notes: NoteRepository::new(connection.clone()),
-            folders: FolderRepository::new(connection.clone()),
+            notes: NoteRepository::new(vault.clone()),
+            folders: FolderRepository::new(vault),
         }
     }
 }

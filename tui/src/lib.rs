@@ -1,23 +1,24 @@
 use crossterm::event::Event;
 use ratatui::Frame;
 use ratatui::layout::Position;
+use uuid::Uuid;
 
 pub mod consts;
-pub mod database;
 pub mod error;
 pub mod folder;
 pub mod markdown;
 pub mod note;
 pub mod repository;
 pub mod service;
+pub mod store;
 pub mod views;
 
-pub use database::Database;
 pub use error::{CoreError, Result};
 pub use folder::Folder;
 pub use note::Note;
 pub use repository::{FolderRepository, NoteRepository, Repositories};
 pub use service::{FolderService, NoteService};
+pub use store::Store;
 
 /// Every long-lived service, built once at startup and owned by `App`.
 ///
@@ -49,12 +50,12 @@ pub trait View {
     }
 
     /// Body of the given note, if this view exposes one (used by external editing).
-    fn note_body(&self, _id: i64) -> Option<String> {
+    fn note_body(&self, _id: Uuid) -> Option<String> {
         None
     }
 
     /// Persist an externally-edited body for the given note.
-    fn set_note_body(&mut self, _svc: &Services, _id: i64, _body: &str) {}
+    fn set_note_body(&mut self, _svc: &Services, _id: Uuid, _body: &str) {}
 }
 
 pub enum Action {
@@ -64,5 +65,5 @@ pub enum Action {
     /// App-level: open the note in an external editor, then persist changes.
     /// Kept separate because it requires terminal suspend/resume, which only
     /// App can do — views can't reach the terminal.
-    EditNote(i64),
+    EditNote(Uuid),
 }

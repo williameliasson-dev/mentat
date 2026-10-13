@@ -1,112 +1,80 @@
 use std::rc::Rc;
 
-use rusqlite::{Connection, params};
+use loro::UpdateOptions;
+use uuid::Uuid;
 
-use crate::{CoreError, Note, Result};
+use crate::store::{Kind, Node, Vault};
+use crate::{Note, Result};
 
 pub struct NoteRepository {
-    connection: Rc<Connection>,
+    vault: Rc<Vault>,
 }
 
 impl NoteRepository {
-    pub(crate) fn new(connection: Rc<Connection>) -> Self {
-        Self { connection }
+    pub(crate) fn new(vault: Rc<Vault>) -> Self {
+        Self { vault }
     }
 
-    pub fn create(&self, folder_id: Option<i64>, title: &str, body: &str) -> Result<Note> {
-        let now = now_unix();
-        self.connection.execute(
-            "INSERT INTO notes (title, body, created_at, updated_at, folder_id)
-             VALUES (?1, ?2, ?3, ?3, ?4)",
-            params![title, body, now, folder_id],
-        )?;
-        Ok(Note {
-            id: self.connection.last_insert_rowid(),
-            folder_id,
-            title: title.to_string(),
-            body: body.to_string(),
-            created_at: now,
-            updated_at: now,
-        })
+    pub fn create(&self, folder_id: Option<Uuid>, title: &str, body: &str) -> Result<Note> {
+        let id = self.vault.create(Kind::Note, folder_id, title)?;
+        self.vault.save_tree()?;
+        if !body.is_empty() {
+            self.vault.body(id)?.insert(0, body)?;
+            self.vault.save_body(id)?;
+        }
+        self.get(id)
     }
 
-    pub fn get(&self, id: i64) -> Result<Note> {
-        self.connection
-            .query_row(
-                "SELECT id, folder_id, title, body, created_at, updated_at
-                 FROM notes WHERE id = ?1",
-                params![id],
-                map_note,
-            )
-            .map_err(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound(id),
-                other => CoreError::Database(other),
-            })
+    pub fn get(&self, id: Uuid) -> Result<Note> {
+        let node = self.vault.get(Kind::Note, id)?;
+        self.note(node)
     }
 
-    /// Notes directly inside `folder_id`; pass `None` for the root.
-    ///
-    /// Uses `IS` rather than `=` so a `NULL` folder matches — `= NULL` is
-    /// always false in SQL and would silently return nothing at the root.
-    pub fn list(&self, folder_id: Option<i64>) -> Result<Vec<Note>> {
-        let mut stmt = self.connection.prepare(
-            "SELECT id, folder_id, title, body, created_at, updated_at FROM notes
-             WHERE folder_id IS ?1 ORDER BY updated_at DESC",
-        )?;
-        let notes = stmt
-            .query_map(params![folder_id], map_note)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(notes)
+    /// Notes directly inside `folder_id` (`None` = root), most recently
+    /// updated first.
+    pub fn list(&self, folder_id: Option<Uuid>) -> Result<Vec<Note>> {
+        let mut nodes = self.vault.children(Kind::Note, folder_id)?;
+        nodes.sort_by_key(|node| std::cmp::Reverse(node.updated_ms));
+        nodes.into_iter().map(|node| self.note(node)).collect()
     }
 
     /// Moves a note into `folder_id`, or to the root with `None`.
-    pub fn move_to(&self, id: i64, folder_id: Option<i64>) -> Result<Note> {
-        let changed = self.connection.execute(
-            "UPDATE notes SET folder_id = ?1, updated_at = ?2 WHERE id = ?3",
-            params![folder_id, now_unix(), id],
-        )?;
-        if changed == 0 {
-            return Err(CoreError::NotFound(id));
+    pub fn move_to(&self, id: Uuid, folder_id: Option<Uuid>) -> Result<Note> {
+        self.vault.move_to(Kind::Note, id, folder_id)?;
+        self.vault.touch(Kind::Note, id)?;
+        self.vault.save_tree()?;
+        self.get(id)
+    }
+
+    pub fn update(&self, id: Uuid, title: &str, body: &str) -> Result<Note> {
+        self.vault.set_name(Kind::Note, id, title)?;
+        self.vault.touch(Kind::Note, id)?;
+        self.vault.save_tree()?;
+
+        // A diff against the current text rather than a wholesale replace, so
+        // an edit made elsewhere to another part of the note survives a merge.
+        let text = self.vault.body(id)?;
+        if text.to_string() != body {
+            text.update(body, UpdateOptions::default())
+                .expect("no timeout set");
+            self.vault.save_body(id)?;
         }
         self.get(id)
     }
 
-    pub fn update(&self, id: i64, title: &str, body: &str) -> Result<Note> {
-        let changed = self.connection.execute(
-            "UPDATE notes SET title = ?1, body = ?2, updated_at = ?3 WHERE id = ?4",
-            params![title, body, now_unix(), id],
-        )?;
-        if changed == 0 {
-            return Err(CoreError::NotFound(id));
-        }
-        self.get(id)
+    pub fn delete(&self, id: Uuid) -> Result<()> {
+        self.vault.delete(Kind::Note, id)?;
+        self.vault.save_tree()
     }
 
-    pub fn delete(&self, id: i64) -> Result<()> {
-        let changed = self
-            .connection
-            .execute("DELETE FROM notes WHERE id = ?1", params![id])?;
-        if changed == 0 {
-            return Err(CoreError::NotFound(id));
-        }
-        Ok(())
+    fn note(&self, node: Node) -> Result<Note> {
+        Ok(Note {
+            body: self.vault.body(node.id)?.to_string(),
+            id: node.id,
+            folder_id: node.parent,
+            title: node.name,
+            created_at: node.created_ms / 1000,
+            updated_at: node.updated_ms / 1000,
+        })
     }
-}
-
-fn map_note(row: &rusqlite::Row) -> rusqlite::Result<Note> {
-    Ok(Note {
-        id: row.get(0)?,
-        folder_id: row.get(1)?,
-        title: row.get(2)?,
-        body: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
-    })
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before unix epoch")
-        .as_secs() as i64
 }

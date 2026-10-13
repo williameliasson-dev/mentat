@@ -4,10 +4,12 @@
 //! service, because copying a folder has to create notes as well — neither
 //! service owns the whole job.
 
+use uuid::Uuid;
+
 use crate::{CoreError, Folder, Note, Result, Services};
 
 /// Copies `note` into `into` (`None` = root), under a title no sibling holds.
-pub fn copy_note(services: &Services, note: &Note, into: Option<i64>) -> Result<Note> {
+pub fn copy_note(services: &Services, note: &Note, into: Option<Uuid>) -> Result<Note> {
     let titles: Vec<String> = services
         .notes
         .list_notes(into)?
@@ -23,7 +25,7 @@ pub fn copy_note(services: &Services, note: &Note, into: Option<i64>) -> Result<
 ///
 /// Only the top-level name is deduplicated: everything below lands in a
 /// freshly created folder, where nothing can collide.
-pub fn copy_folder(services: &Services, folder: &Folder, into: Option<i64>) -> Result<Folder> {
+pub fn copy_folder(services: &Services, folder: &Folder, into: Option<Uuid>) -> Result<Folder> {
     // A folder copied into its own subtree would keep finding the copy it just
     // made as it recursed — the copy grows forever.
     if let Some(dest) = into

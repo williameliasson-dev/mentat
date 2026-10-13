@@ -11,13 +11,12 @@ color-eyre = "0.6.5"
 crossterm = "0.29.0"
 ratatui = "0.30.2"
 minimad = "0.16.0"
-# `bundled` compiles sqlite into the binary: no libsqlite3 on the host, so
-# CI and the released binary do not depend on one being installed.
-rusqlite = { version = "0.39", features = ["bundled"] }
 thiserror = "2.0.19"
 directories = "6.0.0"
 
 proto = { path = "../proto" }
+loro = "1.16.2"
+uuid = { version = "1.28.0", features = ["v4"] }
 
 [lib]
 name ="tui"
