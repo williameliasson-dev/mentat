@@ -4,12 +4,25 @@ name: Build
 # Test workflow covers that — but the binaries from a red ref are useless,
 # so a green Test run on this exact commit is required before anything
 # builds.
+#
+# The `bump` input cuts a release: it bumps the latest v#.#.# tag by the
+# chosen part (minor takes 0.1.9 to 0.2.0), tags this commit and publishes
+# the binaries as release assets under that tag.
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tags, so `bump` can find the latest one; history, so the release
+          # notes can list commits.
+          fetch-depth: 0
 
       # A stale commit is never worth binaries: the latest green Test run on
       # this branch must be exactly this commit.
@@ -36,6 +53,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Determine the version
+        id: version
+        run: |
+          tag=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          IFS=. read -r major minor patch <<< "${tag#v}"
+          major=${major:-0} minor=${minor:-0} patch=${patch:-0}
+          case "${{ inputs.bump }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          echo "tag=v$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -45,11 +75,11 @@ jobs:
       - name: Build release binaries
         run: cargo build --workspace --release --locked
 
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries
-          path: |
-            target/release/sync
-            target/release/tui
-          if-no-files-found: error
+      - name: Publish the release
+        run: |
+          bins=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[].targets[] | select(.kind[0] == "bin") | "target/release/" + .name')
+          gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes $bins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
