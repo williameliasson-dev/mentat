@@ -1,6 +1,6 @@
 [package]
 name = "proto"
-version.workspace = true
+version = "0.1.0"
 description = "Shared protobuf schemas and generated gRPC types (server + client)"
 authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
 license = "MIT"

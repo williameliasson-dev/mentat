@@ -1,6 +1,6 @@
 [package]
 name = "crypto"
-version.workspace = true
+version = "0.1.0"
 description = "Client-side account keys and vault encryption"
 authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
 license = "MIT"

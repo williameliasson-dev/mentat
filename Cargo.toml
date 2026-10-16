@@ -8,12 +8,6 @@ members = [
 ]
 resolver = "3"
 
-# One version for the whole workspace, shared through `version.workspace =
-# true` in the members. This is the single source of truth: a release tags
-# whatever stands here, and package managers later read it from here.
-[workspace.package]
-version = "0.1.0"
-
 # Release optimizations, see: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
 [profile.release]
 codegen-units = 1

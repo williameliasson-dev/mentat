@@ -5,9 +5,10 @@ name: Build
 # so a green Test run on this exact commit is required before anything
 # builds.
 #
-# The release tags whatever version the root Cargo.toml carries — that is
-# the single source of truth, and package managers will read it from there.
-# Bump it in a normal commit first; this run refuses to re-tag a version.
+# The release tags each binary crate by the version its own Cargo.toml
+# carries — tui and sync ship separately, so each gets `tui-v#.#.#` /
+# `sync-v#.#.#` tags and its own release assets. Bump a crate's version in
+# a normal commit first; this run refuses to re-tag a version.
 on:
   workflow_dispatch:
 
@@ -25,8 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tags, so `bump` can find the latest one; history, so the release
-          # notes can list commits.
+          # Tags, so a version can be checked against its last release;
+          # history, so the release notes can list commits.
           fetch-depth: 0
 
       # A stale commit is never worth binaries: the latest green Test run on
@@ -47,18 +48,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Determine the version
-        id: version
-        run: |
-          version=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.name == "tui") | .version')
-          tag="v$version"
-          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
-            echo "$tag already exists — bump the workspace version in Cargo.toml first"
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -68,11 +57,20 @@ jobs:
       - name: Build release binaries
         run: cargo build --workspace --release --locked
 
-      - name: Publish the release
+      - name: Publish the releases
         run: |
-          bins=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[].targets[] | select(.kind[0] == "bin") | "target/release/" + .name')
-          gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes $bins
+          tags=""
+          for crate in tui sync; do
+            version=$(cargo metadata --no-deps --format-version 1 \
+              | jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version')
+            tag="$crate-v$version"
+            if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+              echo "$tag exists already, skipping"
+            else
+              gh release create "$tag" --target "$GITHUB_SHA" --generate-notes "target/release/$crate"
+              tags="$tags $tag"
+            fi
+          done
+          [ -n "$tags" ] || { echo "nothing to release — bump a crate's version first"; exit 1; }
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
