@@ -30,7 +30,7 @@ great plan lets build
 
 nvm tui it is lol
 
-bullshit line to test trigger ci
+bullshit line to test trigger ci x2
 
 
 
