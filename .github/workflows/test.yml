@@ -1,0 +1,65 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Use devenv's binary cache
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+
+      # Materializes .devenv/profile, which holds cargo and rustc, so the next
+      # step can expose them without a second devenv evaluation.
+      - name: Build the devenv shell
+        run: devenv shell -- true
+
+      # rust-cache derives its key by shelling out to cargo/rustc, which exist
+      # only in the devenv profile, so put that on PATH for later steps.
+      - name: Put the devenv toolchain on PATH
+        run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
+
+      # Caches compiled dependencies and crate downloads, pruning stale
+      # artifacts rather than storing the whole multi-GB `target`. Its key
+      # tracks the rustc version, so a nixpkgs bump invalidates correctly.
+      # Only master saves, so pull requests restore from it without each
+      # writing a cache into the 10GB per-repo budget.
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      # Only the bucket: `sync`'s integration tests need a real S3 (the
+      # conditional writes they check are the bucket's), while `tui`'s tests
+      # use in-memory and temp-dir vaults. The sync server itself stays down.
+      - name: Start s3
+        run: devenv up -d s3
+
+      - name: Wait for s3
+        run: timeout 120 devenv shell -- bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
+
+      - name: Test
+        run: devenv shell -- cargo test --workspace --locked
