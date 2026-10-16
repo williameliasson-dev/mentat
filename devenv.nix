@@ -8,6 +8,15 @@
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
   };
 
+  # Lean shell for CI: `devenv --profile ci`, which skips rust-analyzer, a
+  # language server CI never runs, whose closure drags in clang-tools, ccls
+  # and chunks of llvm — the fattest part of an otherwise fresh nix store
+  # download.
+  profiles.ci.module = {
+    languages.rust.components = lib.mkForce [ "rustc" "cargo" "clippy" "rustfmt" ];
+    languages.rust.lsp.enable = lib.mkForce false;
+  };
+
   # Local S3 for the sync server's bucket. versitygw over a plain directory:
   # unlike Garage (which ignores them) it enforces conditional PUTs
   # (If-None-Match / If-Match), which account creation and vault headers rely

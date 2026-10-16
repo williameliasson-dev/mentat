@@ -31,8 +31,8 @@ jobs:
 
       # Materializes .devenv/profile, which holds cargo and rustc, so the next
       # step can expose them without a second devenv evaluation.
-      - name: Build the devenv shell
-        run: devenv shell -- true
+      - name: Build the devenv --profile ci shell
+        run: devenv --profile ci shell -- true
 
       # rust-cache derives its key by shelling out to cargo/rustc, which exist
       # only in the devenv profile, so put that on PATH for later steps.
@@ -53,13 +53,13 @@ jobs:
       # conditional writes they check are the bucket's), while `tui`'s tests
       # use in-memory and temp-dir vaults. The sync server itself stays down.
       - name: Start s3
-        run: devenv up -d s3
+        run: devenv --profile ci up -d s3
 
       - name: Wait for s3
-        run: timeout 120 devenv shell -- bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
+        run: timeout 120 devenv --profile ci shell -- bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
 
       - name: Test
-        run: devenv shell -- cargo test --workspace --locked
+        run: devenv --profile ci shell -- cargo test --workspace --locked
 
   # Runs only when the test job passed. Its cache is kept separate from the
   # test job's: the same `target` compiles a second, release-mode artifact
@@ -86,8 +86,8 @@ jobs:
       - name: Install devenv
         run: nix profile install nixpkgs#devenv
 
-      - name: Build the devenv shell
-        run: devenv shell -- true
+      - name: Build the devenv --profile ci shell
+        run: devenv --profile ci shell -- true
 
       - name: Put the devenv toolchain on PATH
         run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
@@ -99,7 +99,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binaries
-        run: devenv shell -- cargo build --workspace --release --locked
+        run: devenv --profile ci shell -- cargo build --workspace --release --locked
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
