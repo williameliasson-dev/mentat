@@ -36,26 +36,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Install nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
-
-      - name: Use devenv's binary cache
-        uses: cachix/cachix-action@v16
-        with:
-          name: devenv
-
-      - name: Install devenv
-        run: nix profile install nixpkgs#devenv
-
-      - name: Build the devenv --profile ci shell
-        run: devenv --profile ci shell -- true
-
-      - name: Put the devenv toolchain on PATH
-        run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
-
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -63,7 +43,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binaries
-        run: devenv --profile ci shell -- cargo build --workspace --release --locked
+        run: cargo build --workspace --release --locked
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4

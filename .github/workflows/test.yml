@@ -15,36 +15,23 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+
+    # Dev credentials, same ones devenv uses locally: only the local
+    # versitygw below ever sees them.
+    env:
+      S3_ENDPOINT: http://127.0.0.1:7070
+      S3_BUCKET: vaults
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: mentat-dev
+      S3_SECRET_ACCESS_KEY: mentat-dev-secret
+      S3_DATA_DIR: /tmp/mentat-s3
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
-
-      - name: Use devenv's binary cache
-        uses: cachix/cachix-action@v16
-        with:
-          name: devenv
-
-      - name: Install devenv
-        run: nix profile install nixpkgs#devenv
-
-      # Materializes .devenv/profile, which holds cargo and rustc, so the next
-      # step can expose them without a second devenv evaluation.
-      - name: Build the devenv --profile ci shell
-        run: devenv --profile ci shell -- true
-
-      # rust-cache derives its key by shelling out to cargo/rustc, which exist
-      # only in the devenv profile, so put that on PATH for later steps.
-      - name: Put the devenv toolchain on PATH
-        run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
-
       # Caches compiled dependencies and crate downloads, pruning stale
       # artifacts rather than storing the whole multi-GB `target`. Its key
-      # tracks the rustc version, so a nixpkgs bump invalidates correctly.
+      # tracks the rustc version, so a toolchain bump invalidates correctly.
       # Only master saves, so pull requests restore from it without each
       # writing a cache into the 10GB per-repo budget.
       - name: Cache cargo
@@ -53,13 +40,22 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # Only the bucket: `sync`'s integration tests need a real S3 (the
-      # conditional writes they check are the bucket's), while `tui`'s tests
-      # use in-memory and temp-dir vaults. The sync server itself stays down.
-      - name: Start s3
-        run: devenv --profile ci up -d s3
+      # conditional writes they check are the bucket's), while `tui` and
+      # `daemon` tests use in-memory and temp-dir vaults.
+      - name: Install versitygw
+        run: |
+          curl -sSfL https://github.com/versity/versitygw/releases/download/v1.8.0/versitygw_v1.8.0_Linux_x86_64.tar.gz \
+            | tar xz -C /usr/local/bin versitygw_v1.8.0_Linux_x86_64/versitygw --strip-components 1
 
-      - name: Wait for s3
-        run: timeout 120 devenv --profile ci shell -- bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
+      - name: Start s3
+        run: |
+          mkdir -p "$S3_DATA_DIR/$S3_BUCKET"
+          versitygw --port 127.0.0.1:7070 \
+            --access "$S3_ACCESS_KEY_ID" --secret "$S3_SECRET_ACCESS_KEY" \
+            posix "$S3_DATA_DIR" > /tmp/versitygw.log 2>&1 &
+          # A bucket is just a directory here, so creating it is a mkdir;
+          # the wait is only for the listener.
+          timeout 30 bash -c 'until curl -s -o /dev/null "$S3_ENDPOINT"; do sleep 1; done'
 
       - name: Test
-        run: devenv --profile ci shell -- cargo test --workspace --locked
+        run: cargo test --workspace --locked
