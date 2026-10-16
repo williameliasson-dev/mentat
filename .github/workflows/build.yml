@@ -72,10 +72,6 @@ jobs:
               echo "$tag exists already, skipping"
             else
               gh release create "$tag" --target "$GITHUB_SHA" --generate-notes "target/release/$crate"
-              # A checksum verifier runs `sha256sum -c` next to the binary,
-              # so the recorded name is bare.
-              (cd target/release && sha256sum "$crate") > "$tag-SHA256SUMS"
-              gh release upload "$tag" "$tag-SHA256SUMS"
               tags="$tags $tag"
             fi
           done
