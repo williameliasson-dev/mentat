@@ -30,21 +30,25 @@ jobs:
           # history, so the release notes can list commits.
           fetch-depth: 0
 
-      # A stale commit is never worth binaries: the latest green Test run on
-      # this branch must be exactly this commit.
+      # A stale commit is never worth binaries. Test skips runs with no Rust
+      # changes, so the requirement is: some green Test run for a commit
+      # that this one descends from (newest green run wins).
       - name: Require a green test run
         run: |
           passing=$(gh run list \
             --workflow test.yml \
             --branch "$GITHUB_REF_NAME" \
             --status success \
-            --limit 1 \
+            --limit 30 \
             --json headSha \
-            --jq '.[0].headSha // empty')
-          if [ "$passing" != "$GITHUB_SHA" ]; then
-            echo "no green Test run for $GITHUB_SHA — run the Test workflow first"
-            exit 1
-          fi
+            --jq '.[].headSha')
+          for sha in $passing; do
+            if git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+              echo "green: $sha"; exit 0
+            fi
+          done
+          echo "no green Test run behind $GITHUB_SHA — run the Test workflow first"
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
 

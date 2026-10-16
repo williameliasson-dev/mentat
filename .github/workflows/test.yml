@@ -3,7 +3,19 @@ name: Test
 on:
   push:
     branches: [master]
+    paths:
+      - "**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".github/workflows/test.yml"
   pull_request:
+    paths:
+      - "**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".github/workflows/test.yml"
   workflow_dispatch:
 
 # A newer push to the same branch makes an in-flight run redundant.
