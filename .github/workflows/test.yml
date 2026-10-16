@@ -37,6 +37,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
+          # Bumped past v0: that namespace's first entry was saved by a
+          # devenv-era run, whose nix-rustc artifacts the plain Rust of the
+          # runners recompiles while the cache's own marker claims nothing
+          # changed, so it never gets replaced.
+          prefix-key: v1-rust
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # Only the bucket: `sync`'s integration tests need a real S3 (the

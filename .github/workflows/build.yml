@@ -39,7 +39,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: release
+          prefix-key: v1-rust-release
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binaries
