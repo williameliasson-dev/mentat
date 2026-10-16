@@ -1,6 +1,6 @@
 [package]
 name = "daemon"
-version = "0.1.0"
+version.workspace = true
 description = "Owns the local notes vault and syncs it"
 authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
 license = "MIT"

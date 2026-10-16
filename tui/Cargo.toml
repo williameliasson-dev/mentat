@@ -1,6 +1,6 @@
 [package]
 name = "tui"
-version = "0.1.0"
+version.workspace = true
 description = "An example generated using the hello-world template"
 authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
 license = "MIT"

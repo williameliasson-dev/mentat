@@ -5,17 +5,11 @@ name: Build
 # so a green Test run on this exact commit is required before anything
 # builds.
 #
-# The `bump` input cuts a release: it bumps the latest v#.#.# tag by the
-# chosen part (minor takes 0.1.9 to 0.2.0), tags this commit and publishes
-# the binaries as release assets under that tag.
+# The release tags whatever version the root Cargo.toml carries — that is
+# the single source of truth, and package managers will read it from there.
+# Bump it in a normal commit first; this run refuses to re-tag a version.
 on:
   workflow_dispatch:
-    inputs:
-      bump:
-        description: which part of the version to bump
-        type: choice
-        options: [patch, minor, major]
-        default: patch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -56,15 +50,14 @@ jobs:
       - name: Determine the version
         id: version
         run: |
-          tag=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
-          IFS=. read -r major minor patch <<< "${tag#v}"
-          major=${major:-0} minor=${minor:-0} patch=${patch:-0}
-          case "${{ inputs.bump }}" in
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            patch) patch=$((patch + 1)) ;;
-          esac
-          echo "tag=v$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "tui") | .version')
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "$tag already exists — bump the workspace version in Cargo.toml first"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
