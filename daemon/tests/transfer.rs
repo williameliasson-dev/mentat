@@ -1,4 +1,4 @@
-use tui::{CoreError, Services, Store, service::transfer};
+use daemon::{CoreError, Services, Store, service::transfer};
 
 fn services() -> Services {
     Services::new(Store::in_memory().unwrap().repositories())

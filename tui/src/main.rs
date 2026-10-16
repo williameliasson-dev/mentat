@@ -1,7 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
+use daemon::{Services, Store, Syncer};
 use ratatui::DefaultTerminal;
-use tui::{Action, Services, View, views::HomeView};
-use tui::{Store, Syncer};
+use tui::{Action, View, views::HomeView};
 use uuid::Uuid;
 
 mod editor;

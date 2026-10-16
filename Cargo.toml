@@ -4,6 +4,7 @@ members = [
     "sync",
     "proto",
     "crypto",
+    "daemon",
 ]
 resolver = "3"
 

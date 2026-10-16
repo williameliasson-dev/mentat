@@ -2,7 +2,8 @@
 //! covered rather than just the services underneath them.
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use tui::{Services, Store, View, views::NotesView};
+use daemon::{Services, Store};
+use tui::{View, views::NotesView};
 use uuid::Uuid;
 
 fn services() -> Services {

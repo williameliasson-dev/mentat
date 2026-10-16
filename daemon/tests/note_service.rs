@@ -1,4 +1,4 @@
-use tui::{NoteService, Store};
+use daemon::{NoteService, Store};
 
 fn service() -> NoteService {
     NoteService::new(Store::in_memory().unwrap().repositories().notes)

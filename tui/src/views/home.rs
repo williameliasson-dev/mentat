@@ -7,8 +7,10 @@ use ratatui::{
     widgets::Paragraph,
 };
 
+use daemon::Services;
+
 use crate::{
-    Action, Services, View,
+    Action, View,
     consts::colors::{DIM, SAND},
 };
 

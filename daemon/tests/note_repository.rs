@@ -1,4 +1,4 @@
-use tui::{CoreError, NoteRepository, Store};
+use daemon::{CoreError, NoteRepository, Store};
 use uuid::Uuid;
 
 fn repo() -> NoteRepository {

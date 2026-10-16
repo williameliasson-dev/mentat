@@ -1,0 +1,32 @@
+[package]
+name = "daemon"
+version = "0.1.0"
+description = "Owns the local notes vault and syncs it"
+authors = ["williameliasson-dev <williameliasson5@gmail.com>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+crypto = { path = "../crypto" }
+directories = "6.0.0"
+hex = "0.4.3"
+loro = "1.16.2"
+proto = { path = "../proto" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.19"
+tokio = { version = "1.53.2", features = ["rt", "net", "time"] }
+tonic = "0.14.6"
+uuid = { version = "1.28.0", features = ["v4", "serde"] }
+
+[lib]
+name = "daemon"
+path = "src/lib.rs"
+
+[dev-dependencies]
+futures = "0.3.34"
+object_store = "0.14.2"
+sync = { path = "../sync" }
+tokio = { version = "1.53.2", features = ["rt", "net", "macros"] }
+tokio-stream = { version = "0.1.19", features = ["net"] }
+tower = "0.5.3"

@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use tui::{Services, Store};
+use daemon::{Services, Store};
 
 struct TempVault(PathBuf);
 

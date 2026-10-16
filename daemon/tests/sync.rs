@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crypto::AccountKey;
+use daemon::{Services, Store, SyncReport, Syncer};
 use futures::TryStreamExt;
 use object_store::{ObjectStore, ObjectStoreExt};
 use proto::pb::account::v1::account_registry_server::AccountRegistryServer;
@@ -14,7 +15,6 @@ use proto::pb::vault::v1::vaults_server::VaultsServer;
 use sync::grpc::{AccountRegistryRpc, AuthLayer, VaultsRpc};
 use tokio_stream::wrappers::TcpListenerStream;
 use tower::Layer;
-use tui::{Services, Store, SyncReport, Syncer};
 
 struct Server {
     url: String,

@@ -628,6 +628,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "daemon"
+version = "0.1.0"
+dependencies = [
+ "crypto",
+ "directories",
+ "futures",
+ "hex",
+ "loro",
+ "object_store",
+ "proto",
+ "serde",
+ "serde_json",
+ "sync",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4122,23 +4144,9 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "crossterm",
- "crypto",
- "directories",
- "futures",
- "hex",
- "loro",
+ "daemon",
  "minimad",
- "object_store",
- "proto",
  "ratatui",
- "serde",
- "serde_json",
- "sync",
- "thiserror 2.0.21",
- "tokio",
- "tokio-stream",
- "tonic",
- "tower",
  "uuid",
 ]
 

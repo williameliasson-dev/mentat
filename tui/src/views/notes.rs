@@ -9,7 +9,9 @@ use ratatui::{
 
 use uuid::Uuid;
 
-use crate::{Action, Folder, Note, Services, View, consts::colors, service::transfer};
+use daemon::{Folder, Note, Services, service::transfer};
+
+use crate::{Action, View, consts::colors};
 
 const TITLE_MAX: usize = 60;
 

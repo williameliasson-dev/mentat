@@ -1,4 +1,4 @@
-use tui::{CoreError, Repositories, Store};
+use daemon::{CoreError, Repositories, Store};
 
 fn repos() -> Repositories {
     Store::in_memory().unwrap().repositories()
