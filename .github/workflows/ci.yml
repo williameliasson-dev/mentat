@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: test and build
+  test:
+    name: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,43 @@ jobs:
       - name: Test
         run: devenv shell -- cargo test --workspace --locked
 
-      # Only reached if the tests passed, since a failed step fails the job.
+  # Runs only when the test job passed. Its cache is kept separate from the
+  # test job's: the same `target` compiles a second, release-mode artifact
+  # tree, and one shared cache would have the two jobs overwriting each
+  # other's saves.
+  build:
+    name: build release
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            accept-flake-config = true
+
+      - name: Use devenv's binary cache
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+
+      - name: Build the devenv shell
+        run: devenv shell -- true
+
+      - name: Put the devenv toolchain on PATH
+        run: echo "$PWD/.devenv/profile/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: release
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
       - name: Build release binaries
         run: devenv shell -- cargo build --workspace --release --locked
 
